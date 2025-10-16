@@ -1,0 +1,14 @@
+Para desplegar KAFKA:
+- Hacer pull desde docker: docker pull apache/kafka:4.1.0
+- Hacer el run: docker run -p 9092:9092 apache/kafka:4.1.0
+
+Para desplegar la BD:
+-Hacer el pull de MariaDB: docker pull mariadb:latest
+-Hacer el run: docker run -e MARIADB_ROOT_PASSWORD=mypass -p 3306:3306 mariadb:latest
+-Descargar DBeaver: sudo apt install -y dbeaver-ce
+-Establecer la conexion con DBeaver: Se crea la conexion de la base de datos:
+    Host: localhost
+    Puerto: 3306
+    Usuario: root
+    Contrasena: mypass
+
