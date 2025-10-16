@@ -42,7 +42,10 @@ public class ChargingPoint {
 		InputStreamReader inp= new InputStreamReader(centralSocket.getInputStream());
 		centralIn = new BufferedReader(inp);
 		
-		//falta crear la central primero
+		String resgistroStr = String.format("Registro %s, %s, %.2f", id, ubicacion, precioKwh);
+        centralOut.println(resgistroStr);
+        
+        String 
 		
 		return true;
 	   } 
@@ -54,11 +57,22 @@ public class ChargingPoint {
    }
    
    private void enviarEstadoACentral() {
-   	
+	   if(registradoCentral && centralOut != null) {
+		   String estadoStr;
+		   if(funciona == true) {
+			   estadoStr= "Actualizacion Estado " + id + ", " + estado.name() + ", OK";
+		   }
+		   else {
+			   estadoStr= "Actualizacion Estado " + id + ", " + estado.name() + ", KO";
+		   }   
+		   centralOut.println(estadoStr);
+	   }
    }
    
    private void enviarMensajeACentral(String mensaje) {
-   	
+	   if(registradoCentral && centralOut != null) {
+		   centralOut.println(mensaje);
+	   }
    }
    
    public void activar() {
@@ -93,7 +107,16 @@ public class ChargingPoint {
   }
   
   public boolean autorizarSuministro(String conductorId, String sesionId) {
-	  
+	  if(estado == CPState.ACTIVADO && funciona) {
+		  System.out.println("Autorizado el suministro para el conductor: " + conductorId);
+		  enviarMensajeACentral("Autorizado " + sesionId + ", " + conductorId);
+		  return true;
+	  }
+	  else {
+		  System.out.println("Denegado el suministro - No disponible");
+		  enviarMensajeACentral("Denegado " + sesionId + ", " + conductorId);
+		  return false;
+	  }
   }
   
   public boolean iniciarSuministroAutorizado(String conductorId, String sesionId) {
@@ -109,7 +132,7 @@ public class ChargingPoint {
 	   this.consumoActual=0.0;
 	   this.importeActual=0.0;
 	   
-	   enviarMensajeACentral();
+	   enviarMensajeACentral("Iniciando " + conductorId + ", " + tipo);
 	   return true;
   }
   
@@ -117,13 +140,13 @@ public class ChargingPoint {
 	   if (estado == CPState.SUMINISTRANDO) {
 		   this.conductorActual += kw;
 		   this.importeActual = this.consumoActual * precioKwh;
-		   enviarMensajeACentral();
+		   enviarMensajeACentral(String.format("Actualizado %.2f, %.2f", consumoActual, importeActual));
 	   }
   }
   
   public void finalizarSuministro() {
 	   if(estado==CPState.SUMINISTRANDO) {
-		   enviarMensajeACentral();
+		   enviarMensajeACentral(String.format("Finalizado %.2f, %.2f", consumoActual, importeActual));
 		   System.out.println("Suministro finalizado");
 	       System.out.println("Ticket - Consumo: " + consumoActual + " kW, Importe: " + importeActual + " €");
 	       
@@ -155,7 +178,19 @@ public class ChargingPoint {
   }
   
   public void procesarComandoCentral(String comando) {
+	  String[] partes = comando.split(",");
+	  String tipo = partes[0];
 	  
+	  switch(tipo) {
+	  	case "Inicio":
+	  		
+	  	case "Parar":
+	  		
+	  	case "Continuar":
+	  		
+	  	case "Parada_Emergencia":
+	  		
+	  }	  
   }
     
    public String getId() { 
