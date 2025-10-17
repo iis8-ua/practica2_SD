@@ -1,10 +1,11 @@
 package p2.evcharging.cp;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.Socket;
+
+import p2.evcharging.cp.network.CentralConnector;
+import p2.evcharging.cp.service.ChargingSessionService;
 
 public class ChargingPoint {
 	private String id;
@@ -21,9 +22,9 @@ public class ChargingPoint {
     //Esta variable está a true o false dependiendo si funciona o no el CP
     private boolean funciona;
     private boolean registradoCentral;
-    private Socket centralSocket;
-    private PrintWriter centralOut;
-    private BufferedReader centralIn;
+    
+    private CentralConnector conector;
+    private ChargingSessionService servicio;
     
     public ChargingPoint(String id, String ubicacion, double precioKwh) {
     	this.id=id;
@@ -32,22 +33,14 @@ public class ChargingPoint {
     	this.estado=CPState.DESCONECTADO;
     	this.funciona=true;
     	this.registradoCentral=false;
+    	this.servicio=new ChargingSessionService(this);
+    	this.consumoActual=0.0;
+    	this.importeActual=0.0;
     }
    
     
    public boolean registroEnCentral(String centralHost, int centralPort) {
 	   try {
-		centralSocket = new Socket(centralHost, centralPort);
-		centralOut= new PrintWriter(centralSocket.getOutputStream(), true);
-		InputStreamReader inp= new InputStreamReader(centralSocket.getInputStream());
-		centralIn = new BufferedReader(inp);
-		
-		String resgistroStr = String.format("Registro %s, %s, %.2f", id, ubicacion, precioKwh);
-        centralOut.println(resgistroStr);
-        
-        String 
-		
-		return true;
 	   } 
 	   catch (IOException e) {
 		   System.err.println("ERROR conectando a central: " + e.getMessage());
@@ -56,29 +49,11 @@ public class ChargingPoint {
 	   }
    }
    
-   private void enviarEstadoACentral() {
-	   if(registradoCentral && centralOut != null) {
-		   String estadoStr;
-		   if(funciona == true) {
-			   estadoStr= "Actualizacion Estado " + id + ", " + estado.name() + ", OK";
-		   }
-		   else {
-			   estadoStr= "Actualizacion Estado " + id + ", " + estado.name() + ", KO";
-		   }   
-		   centralOut.println(estadoStr);
-	   }
-   }
-   
-   private void enviarMensajeACentral(String mensaje) {
-	   if(registradoCentral && centralOut != null) {
-		   centralOut.println(mensaje);
-	   }
-   }
    
    public void activar() {
 	   if(registradoCentral && funciona) {
 		   this.estado=CPState.ACTIVADO;
-		   enviarEstadoACentral();
+		   conector.enviarEstadoACentral();
 		   System.out.println("CP activado");
 	   }
 	   else {
@@ -88,17 +63,17 @@ public class ChargingPoint {
    
    public void parar() {
 	   if(estado == CPState.SUMINISTRANDO) {
-		   finalizarSuministro();
+		   servicio.finalizarSuministro();
 	   }
 	   this.estado=CPState.PARADO;
-	   enviarEstadoACentral();
+	   conector.enviarEstadoACentral();
 	   System.out.println("CP fuera de servicio");
    }
    
    
   public boolean iniciarSuministroManual(String conductorId) {
-	  if(estado==CPState.SUMINISTRANDO && funciona && registradoCentral) {
-		  return iniciarSuministro(conductorId, "Manual");
+	  if(puedeIniciarSuministro()) {
+		  return servicio.iniciarSuministro(conductorId, "Manual");
 	  }
 	  else {
 		  System.out.println("No se puede iniciar suministro - Estado: " + estado + ", Salud: " + funciona);
@@ -107,55 +82,45 @@ public class ChargingPoint {
   }
   
   public boolean autorizarSuministro(String conductorId, String sesionId) {
-	  if(estado == CPState.ACTIVADO && funciona) {
+	  if(puedeIniciarSuministro()) {
 		  System.out.println("Autorizado el suministro para el conductor: " + conductorId);
-		  enviarMensajeACentral("Autorizado " + sesionId + ", " + conductorId);
+		  conector.enviarAutorizacion(sesionId, conductorId, true);
 		  return true;
 	  }
 	  else {
-		  System.out.println("Denegado el suministro - No disponible");
-		  enviarMensajeACentral("Denegado " + sesionId + ", " + conductorId);
+		  System.out.println("Denegado el suministro --> No disponible");
+		  conector.enviarAutorizacion(sesionId, conductorId, false);
 		  return false;
 	  }
   }
   
   public boolean iniciarSuministroAutorizado(String conductorId, String sesionId) {
 	  if(autorizarSuministro(conductorId, sesionId)) {
-		  return iniciarSuministro(conductorId, "Automatico");
+		  return servicio.iniciarSuministro(conductorId, "Automatico");
 	  }
 	  return false;
   }
-   
-  public boolean iniciarSuministro(String conductorId, String tipo) {
-	   this.estado=CPState.SUMINISTRANDO;
-	   this.conductorActual=conductorId;
-	   this.consumoActual=0.0;
-	   this.importeActual=0.0;
-	   
-	   enviarMensajeACentral("Iniciando " + conductorId + ", " + tipo);
-	   return true;
+  
+  private boolean puedeIniciarSuministro() {
+      return estado == CPState.ACTIVADO && funciona && registradoCentral;
   }
   
   public void actualizarConsumo(double kw) {
 	   if (estado == CPState.SUMINISTRANDO) {
-		   this.conductorActual += kw;
+		   this.consumoActual += kw;
 		   this.importeActual = this.consumoActual * precioKwh;
-		   enviarMensajeACentral(String.format("Actualizado %.2f, %.2f", consumoActual, importeActual));
+		   conector.enviarActualizacionConsumo(consumoActual,importeActual);
 	   }
   }
   
   public void finalizarSuministro() {
-	   if(estado==CPState.SUMINISTRANDO) {
-		   enviarMensajeACentral(String.format("Finalizado %.2f, %.2f", consumoActual, importeActual));
-		   System.out.println("Suministro finalizado");
-	       System.out.println("Ticket - Consumo: " + consumoActual + " kW, Importe: " + importeActual + " €");
-	       
-	       this.estado = CPState.ACTIVADO;
-	       this.conductorActual = null;
-	       this.consumoActual = 0.0;
-	       this.importeActual = 0.0;
-	   }
+	  if(this.estado == CPState.SUMINISTRANDO) {
+		  servicio.finalizarSuministro();
+		  this.consumoActual=0.0;
+		  this.importeActual=0.0;
+	  }
   }
+  
   
   public void setFunciona(boolean funciona) {
 	  boolean anterior=this.funciona;
@@ -163,7 +128,7 @@ public class ChargingPoint {
 	  
 	  if(!funciona && anterior) {
 		  this.estado=CPState.AVERIADO;
-		  enviarMensajeACentral(id);
+		  conector.reportarAveria();
 		  System.out.println("Avería pasada a Central");
 		  
 		  if (estado == CPState.SUMINISTRANDO) {
@@ -172,25 +137,45 @@ public class ChargingPoint {
 	  }
 	  else if (funciona && !anterior) {
 		  this.estado=CPState.ACTIVADO;
-		  enviarMensajeACentral(id);
+		  conector.reportarRecuperacion();
 		  System.out.println("Recuperación pasada a Central");
 	  }
   }
   
   public void procesarComandoCentral(String comando) {
-	  String[] partes = comando.split(",");
+	  String[] partes = comando.split("\\|");
 	  String tipo = partes[0];
 	  
 	  switch(tipo) {
 	  	case "Inicio":
+	  		if(partes.length >= 3) {
+	  			iniciarSuministroAutorizado(partes[1], partes[2]);
+	  		}
+	  		break;
 	  		
 	  	case "Parar":
+	  		parar();
+	  		break;
 	  		
 	  	case "Continuar":
+	  		activar();
+	  		break;
 	  		
 	  	case "Parada_Emergencia":
-	  		
+	  		if(estado == CPState.SUMINISTRANDO) {
+	  			finalizarSuministro();
+	  		}
+	  		parar();
+	  		break;
 	  }	  
+  }
+  
+  public void setEstado(CPState estado) {
+	  this.estado=estado;
+  }
+  
+  public void setConductorActual(String conductor) {
+		this.conductorActual=conductor;	
   }
     
    public String getId() { 
@@ -221,6 +206,14 @@ public class ChargingPoint {
 	   return registradoCentral; 
    }
    
+   public ChargingSessionService getServicio() {
+	   return servicio;
+   }
+   
+   public CentralConnector getConector() {
+	   return conector;
+   }
+   
    public void imprimirInfoCP() {
 	   System.out.println("\n=== ESTADO COMPLETO CP " + id + " ===");
        System.out.println("Ubicación: " + ubicacion);
@@ -248,8 +241,6 @@ public class ChargingPoint {
        }
        System.out.println("=================================");
    }
-  
-    
     
 }
 
