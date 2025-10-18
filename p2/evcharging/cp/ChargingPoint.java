@@ -39,10 +39,23 @@ public class ChargingPoint {
     }
    
     
-   public boolean registroEnCentral(String centralHost, int centralPort) {
+   public boolean registroEnCentral(String host, int puerto, String dirKafka) {
 	   try {
+		   this.conector= new CentralConnector(host, puerto, dirKafka, this);
+		   boolean exito =conector.registrarCentral();
+		   
+		   if(exito) {
+			   this.registradoCentral=true;
+			   this.estado=CPState.ACTIVADO;
+			   System.out.println("CP " + id + " registrado correctamente en la Central");
+			   return true;
+		   }
+		   else {
+			   this.estado=CPState.DESCONECTADO;
+			   return false;
+		   }
 	   } 
-	   catch (IOException e) {
+	   catch (Exception e) {
 		   System.err.println("ERROR conectando a central: " + e.getMessage());
 		   this.estado=CPState.DESCONECTADO;
 		   return false;
