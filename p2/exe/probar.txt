@@ -1,0 +1,4 @@
+# Consumir mensajes de uno de tus topics
+$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic cp-estado --from-beginning
+
+# En otro terminal, ejecuta tu CP y verás los mensajes

@@ -1,4 +1,4 @@
-package p2.evcharging.central;
+package p2.central;
 
 import common.util.KafkaProducerHelper;
 import common.util.KafkaConsumerHelper;

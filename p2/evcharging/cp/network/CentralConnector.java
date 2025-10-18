@@ -225,7 +225,13 @@ public class CentralConnector {
 	public void cerrarConexiones() {
 		conectado=false;
 		try {
-			
+			if(socket != null && !socket.isClosed()) {
+				socket.close();
+			}
+			if(kafkaProducer !=null) {
+				kafkaProducer.close();
+			}
+			System.out.println("Conexiones cerradas correctamente");
 		}
 		catch(Exception e) {
 			System.err.println("Error cerrando conexiones: " +e.getMessage());

@@ -1,4 +1,4 @@
-package p2.evcharging.central;
+package p2.central;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import common.util.KafkaProducerHelper;
