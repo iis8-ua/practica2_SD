@@ -48,6 +48,8 @@ public class EV_CP_E {
 			  }
 			  
 			  this.monitor= new MonitorServer(cp, 8080);
+			  Thread hiloMonitor = new Thread(() -> monitor.iniciar());
+			  hiloMonitor.start();
 			  this.funcionamiento=true;
 			  ejecutarBuclePrincipal();
 		  }

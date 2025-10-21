@@ -1,43 +1,151 @@
 package p2.central;
 
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import common.util.KafkaProducerHelper;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import java.time.Duration;
+
 
 public class HiloServidor extends Thread {
+	private KafkaProducer<String, String> productor;
+    private KafkaConsumer<String, String> consumidor;
+    private boolean ejecucion;
+		
+	public HiloServidor(KafkaProducer<String, String> productor, KafkaConsumer<String, String> consumidor) {
+		 this.productor=productor;
+		 this.consumidor=consumidor;
+		 this.ejecucion=false;
+	}
 
-    private final ConsumerRecord<String, String> record;
-    private final GestionCentral gestion;
-    private final KafkaProducerHelper producer;
+	@Override
+	public void run() {
+		this.ejecucion=true;
+		procesarMensajesKafka();
+	}
 
-    public HiloServidor(ConsumerRecord<String, String> record, KafkaProducerHelper producer) {
-        this.record = record;
-        this.gestion = new GestionCentral();
-        this.producer = producer;
-    }
-
-    @Override
-    public void run() {
-        try {
-            String mensaje = record.value();
-            System.out.println("Mensaje recibido: " + mensaje);
-
-            // Mantiene el mismo formato con separador |
-            String[] partes = mensaje.split("\\|");
-            if (partes.length < 1) {
-                System.out.println("Mensaje mal formado");
-                return;
-            }
-
-            String respuesta = gestion.procesarMensaje(partes);
-
-            // Enviar respuesta a topic de salida (central-to-cp)
-            String cpId = partes.length > 1 ? partes[1] : "unknown";
-            producer.send("central-to-cp", cpId, respuesta);
-
-            System.out.println("Respuesta enviada a topic central-to-cp: " + respuesta);
-
-        } catch (Exception e) {
-            System.out.println("Error en HiloServidorKafka: " + e);
+	 private void procesarMensajesKafka() {
+		 while(ejecucion) {
+			 try {
+				 //Libreria para que el consumidor reciba los mensajes desde kafka
+				 ConsumerRecords<String, String> records = consumidor.poll(Duration.ofMillis(100));
+				 //cada mensaje que llega se procesa en un hilo separado al resto
+				 records.forEach(record -> {
+					 new Thread(() -> procesarMensaje(record.topic(), record.key(), record.value())).start();
+				 });
+			 }
+			 catch(Exception e) {
+				 if(ejecucion) {
+					 System.err.println("Error procesando los mensajes de Kafka desde los hilos: " + e.getMessage());
+				 }
+			 }
+		 }
+	 }
+	
+	private void procesarMensaje(String tema, String cpId, String mensaje) {
+		System.out.println("Se ha recibido - Tema: " + tema + ", CP: " + cpId + ", Mensaje: " + mensaje);
+		
+		try {
+			switch (tema) {
+            case "cp-registro":
+                procesarRegistro(cpId, mensaje);
+                break;
+            case "cp-estado":
+                procesarActualizacionEstado(cpId, mensaje);
+                break;
+            case "cp-autorizacion":
+                procesarAutorizacion(cpId, mensaje);
+                break;
+            case "actualizacion-recarga":
+                procesarActualizacionRecarga(cpId, mensaje);
+                break;
+            case "fallo-cp":
+                procesarAveria(cpId, mensaje);
+                break;
+            case "recuperación-cp":
+                procesarRecuperacion(cpId, mensaje);
+                break;
+            default:
+                System.out.println("Tema no reconocido: " + tema);
         }
-    }
+		}
+		catch(Exception e) {
+			System.err.println("Error procesando el mensaje: " + e.getMessage());
+		}
+
+	}
+
+	private void procesarRecuperacion(String cpId, String mensaje) {
+		System.out.println("Recuperacion reportada en CP: " + cpId);
+		
+		String confirmacion = "Recuperacion_ACK|" + cpId;
+        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+        
+        String confirmacion2= "Recuperacion|" + cpId;
+        productor.send(new ProducerRecord<>("sistema-eventos", cpId, confirmacion2));
+	}
+
+	private void procesarAveria(String cpId, String mensaje) {
+		System.out.println("Averia reportada en CP: " + cpId);
+		
+		String confirmacion = "Averia_ACK|" + cpId;
+        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+        
+        String confirmacion2= "Averia|" + cpId;
+        productor.send(new ProducerRecord<>("sistema-eventos", cpId, confirmacion2));
+
+	}
+
+	private void procesarActualizacionRecarga(String cpId, String mensaje) {
+		String[] partes = mensaje.split("\\|");
+        String consumo = partes[1];
+        String importe = partes[2];
+        
+        System.out.println("Recarga CP " + cpId + ": " + consumo + " kW - " + importe + " €");
+        
+        String confirmacion = "Consumo_OK|" + cpId;
+        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+	}
+
+	private void procesarAutorizacion(String cpId, String mensaje) {
+		System.out.println("Procesando autorización CP " + cpId + ": " + mensaje);
+		
+		if(mensaje.contains("Aceptada")) {
+			String confirmacion = "Autorización_OK_ACK|" + cpId;
+	        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+		}
+		else {
+			String confirmacion = "Autorización_DEN_ACK|" + cpId;
+	        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+		}
+	}
+
+	private void procesarActualizacionEstado(String cpId, String mensaje) {
+		String[] partes = mensaje.split("\\|");
+        String estado = partes[1];
+        String funciona = partes[2];
+
+        System.out.println("Estado actualizado CP: " + cpId + ": " + estado + " - Funciona: " + funciona);
+        
+        String confirmacion = "Actualizacion_OK|" + cpId;
+        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+	}
+
+	private void procesarRegistro(String cpId, String mensaje) {
+		String[] partes = mensaje.split("\\|");
+        String ubicacion = partes[1];
+        String precio = partes[2];
+
+        System.out.println("CP registrado: " + cpId + " en " + ubicacion + " - Precio: " + precio);
+        
+        String confirmacion = "Registro_OK|" + cpId;
+        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+		
+	}
+
+	public void detener() {
+		ejecucion=false;
+		this.interrupt();
+		 System.out.println("Hilo servidor detenido");
+	}
 }

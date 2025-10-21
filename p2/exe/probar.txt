@@ -2,3 +2,31 @@
 $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic cp-estado --from-beginning
 
 # En otro terminal, ejecuta tu CP y verás los mensajes
+
+#Creacion de topics
+cd ~/Kafka
+cd /home/israelizqdo/Kafka
+bin/kafka-topics.sh --create --topic cp-registro --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic cp-estado --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic cp-autorizacion --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic actualizacion-recarga --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic fallo-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic recuperacion-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic central-to-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic sistema-eventos --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+
+#COMPILACION
+cd ~/eclipse-workspace/SD-base/src
+javac -cp "p2/libs/*" p2/evcharging/cp/*.java p2/evcharging/cp/network/*.java p2/evcharging/cp/service/*.java
+javac -cp "p2/libs/*" p2/central/*.java
+
+#Iniciar KAFKA
+cd ~/Kafka
+bin/kafka-server-start.sh config/server.properties
+
+#Iniciar Central
+java -cp ".:p2/libs/*:p2" p2.central.EV_Central localhost:9092
+
+#Inicar Engine
+java -cp ".:p2/libs/*:p2" p2.evcharging.cp.EV_CP_E CP001 "Calle Principal 123" 0.15 localhost:9090 localhost:9092
