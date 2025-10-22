@@ -39,9 +39,9 @@ public class ChargingPoint {
     }
    
     
-   public boolean registroEnCentral(String host, int puerto, String dirKafka) {
+   public boolean registroEnCentral(String dirKafka) {
 	   try {
-		   this.conector= new CentralConnector(host, puerto, dirKafka, this);
+		   this.conector= new CentralConnector(dirKafka, this);
 		   boolean exito =conector.registrarCentral();
 		   
 		   if(exito) {

@@ -13,6 +13,14 @@ import java.util.Properties;
 public class EV_Central {
 
     public static void main(String[] args) {
+    	//para que no aparezcan los mensajes de kafka en la central 
+    	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.kafka", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.zookeeper", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "error");
+    	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
+    	
         if (args.length < 1) {
         	System.out.println("Uso: java p2.central.EV_Central <host:puerto>");
             //System.out.println("Ejemplo: java p2.central.EV_Central localhost:9092");

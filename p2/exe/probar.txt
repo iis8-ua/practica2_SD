@@ -5,7 +5,6 @@ $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --to
 
 #Creacion de topics
 cd ~/Kafka
-cd /home/israelizqdo/Kafka
 bin/kafka-topics.sh --create --topic cp-registro --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic cp-estado --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic cp-autorizacion --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
@@ -14,6 +13,10 @@ bin/kafka-topics.sh --create --topic fallo-cp --bootstrap-server localhost:9092 
 bin/kafka-topics.sh --create --topic recuperacion-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic central-to-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic sistema-eventos --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic monitor-registro --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+#Ver los topics
+bin/kafka-topics.sh --list --bootstrap-server localhost:9092
 
 
 #COMPILACION
@@ -30,3 +33,6 @@ java -cp ".:p2/libs/*:p2" p2.central.EV_Central localhost:9092
 
 #Inicar Engine
 java -cp ".:p2/libs/*:p2" p2.evcharging.cp.EV_CP_E CP001 "Calle Principal 123" 0.15 localhost:9090 localhost:9092
+
+#Iniciar Monitor
+java -cp ".:p2/libs/*:p2" p2.evcharging.cp.EV_CP_M localhost 8080 CP001 localhost:9092

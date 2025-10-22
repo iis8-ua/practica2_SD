@@ -21,7 +21,8 @@ public class ServidorConcurrente {
     			"cp-autorizacion",
     			"actualizacion-recarga",
     			"fallo-cp",
-    			"recuperacion-cp"
+    			"recuperacion-cp",
+    			"monitor-registro"
     	));
     }
     

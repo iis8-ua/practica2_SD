@@ -47,32 +47,42 @@ public class HiloServidor extends Thread {
 		
 		try {
 			switch (tema) {
-            case "cp-registro":
-                procesarRegistro(cpId, mensaje);
-                break;
-            case "cp-estado":
-                procesarActualizacionEstado(cpId, mensaje);
-                break;
-            case "cp-autorizacion":
-                procesarAutorizacion(cpId, mensaje);
-                break;
-            case "actualizacion-recarga":
-                procesarActualizacionRecarga(cpId, mensaje);
-                break;
-            case "fallo-cp":
-                procesarAveria(cpId, mensaje);
-                break;
-            case "recuperación-cp":
-                procesarRecuperacion(cpId, mensaje);
-                break;
-            default:
-                System.out.println("Tema no reconocido: " + tema);
-        }
+	            case "cp-registro":
+	                procesarRegistro(cpId, mensaje);
+	                break;
+	            case "cp-estado":
+	                procesarActualizacionEstado(cpId, mensaje);
+	                break;
+	            case "cp-autorizacion":
+	                procesarAutorizacion(cpId, mensaje);
+	                break;
+	            case "actualizacion-recarga":
+	                procesarActualizacionRecarga(cpId, mensaje);
+	                break;
+	            case "fallo-cp":
+	                procesarAveria(cpId, mensaje);
+	                break;
+	            case "recuperación-cp":
+	                procesarRecuperacion(cpId, mensaje);
+	                break;
+	            case "monitor-registro":
+	            	procesarRegistroMonitor(cpId, mensaje);
+	            	break;
+	            default:
+	                System.out.println("Tema no reconocido: " + tema);
+			}
 		}
 		catch(Exception e) {
 			System.err.println("Error procesando el mensaje: " + e.getMessage());
 		}
 
+	}
+
+	private void procesarRegistroMonitor(String cpId, String mensaje) {
+		System.out.println("Monitor registrado para CP: " + cpId);
+	    
+	    String confirmacion = "Monitor_Registro_OK|" + cpId;
+	    productor.send(new ProducerRecord<>("central-to-monitor", cpId, confirmacion));
 	}
 
 	private void procesarRecuperacion(String cpId, String mensaje) {
@@ -122,8 +132,8 @@ public class HiloServidor extends Thread {
 
 	private void procesarActualizacionEstado(String cpId, String mensaje) {
 		String[] partes = mensaje.split("\\|");
-        String estado = partes[1];
-        String funciona = partes[2];
+        String estado = partes[2];
+        String funciona = partes[3];
 
         System.out.println("Estado actualizado CP: " + cpId + ": " + estado + " - Funciona: " + funciona);
         
@@ -133,8 +143,8 @@ public class HiloServidor extends Thread {
 
 	private void procesarRegistro(String cpId, String mensaje) {
 		String[] partes = mensaje.split("\\|");
-        String ubicacion = partes[1];
-        String precio = partes[2];
+        String ubicacion = partes[2];
+        String precio = partes[3];
 
         System.out.println("CP registrado: " + cpId + " en " + ubicacion + " - Precio: " + precio);
         

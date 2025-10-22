@@ -3,38 +3,44 @@ package p2.evcharging.cp;
 import p2.evcharging.cp.network.CentralConnector;
 import java.io.*;
 import java.net.Socket;
+import java.util.Properties;
 import java.util.Scanner;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 
 
 public class EV_CP_M {
 	private String cpId;
     private String hostEngine;
     private int puertoEngine;
-    private String hostCentral;
-    private int puertoCentral;
     private String dirKafka;
     private boolean ejecucion;
-    private Thread hilo;
     private CentralConnector conector;
     private Scanner scanner;
     
     
     public static void main(String[] args) {
-        if (args.length < 6) {
-            System.out.println("Uso: java EV_CP_M <host_engine> <puerto_engine> <host_central> <puerto_central> <cp_id> <dirKafka>");
-            //System.out.println("Ej: java EV_CP_M localhost 8080 localhost 9090 CP001 localhost:9092");
+    	//para que no aparezcan los mensajes de kafka en la central 
+    	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.kafka", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.zookeeper", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "error");
+    	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
+    	
+        if (args.length < 4) {
+        	System.out.println("Uso: java EV_CP_M <host_engine> <puerto_engine> <cp_id> <dirKafka>");
+            //System.out.println("Ej: java EV_CP_M localhost 8080 CP001 localhost:9092");
             return;
         }
 
         String hostEngine = args[0];
         int puertoEngine = Integer.parseInt(args[1]);
-        String hostCentral = args[2];
-        int puertoCentral = Integer.parseInt(args[3]);
-        String cpId = args[4];
-        String dirKafka = args[5];
+        String cpId = args[2];
+        String dirKafka = args[3];
 
         EV_CP_M monitor = new EV_CP_M();
-        monitor.iniciar(hostEngine, puertoEngine, hostCentral, puertoCentral, cpId, dirKafka);
+        monitor.iniciar(hostEngine, puertoEngine, cpId, dirKafka);
     }
     
     public void escribirDatos(Socket sock, String datos) {
@@ -65,12 +71,10 @@ public class EV_CP_M {
 		return datos;
 	}
     
-    public void iniciar(String hostEngine, int puertoEngine, String hostCentral, int puertoCentral, String cpId, String dirKafka) {
+    public void iniciar(String hostEngine, int puertoEngine, String cpId, String dirKafka) {
     	try {
     		this.hostEngine = hostEngine;
             this.puertoEngine = puertoEngine;
-            this.hostCentral = hostCentral;
-            this.puertoCentral = puertoCentral;
             this.cpId = cpId;
             this.dirKafka = dirKafka;
             this.ejecucion = true;
@@ -81,8 +85,9 @@ public class EV_CP_M {
                 return;
             }
             
-            iniciarMonitorizacion();
             System.out.println("Monitor iniciado para el CP: " + cpId);
+            System.out.println("Conectado al Engine en: " + hostEngine + ":" + puertoEngine);
+            System.out.println("Conectado a Central en: " + dirKafka);
             ejecutarBuclePrincipal();
     	}
     	catch(Exception e) {
@@ -97,10 +102,6 @@ public class EV_CP_M {
 	private void detener() {
 		ejecucion=false;
 		try {
-			if(hilo !=null && hilo.isAlive()) {
-				hilo.interrupt();
-			}
-			
 			if(conector !=null) {
 				conector.cerrarConexiones();
 			}
@@ -125,37 +126,14 @@ public class EV_CP_M {
 		
 	}
 
-	private void iniciarMonitorizacion() {
-		hilo = new Thread(() -> {
-			while(ejecucion) {
-				try {
-					boolean estadoEngine=verificarEstadoEngine();
-					
-					if(!estadoEngine) {
-						reportarAveria();
-						System.out.println("Averia producida");
-					}
-					else {
-						System.out.println("Engine funcionando");
-					}
-				}
-				
-				catch(Exception e) {
-					System.err.println("Error en la monitorización: " + e.getMessage());
-				}
-			}
-		});
-		hilo.start();
-		
-	}
-
 	private boolean verificarEstadoEngine() {
 		try {
 			Socket s= new Socket(hostEngine, puertoEngine);
 			escribirDatos(s, "Comprobar_Funciona");
 			
 			String respuesta= leerDatos(s);
-			if (respuesta == "Funciona_OK") {
+			System.out.println("Respuesta health check: " + respuesta); 
+			if ("Funciona_OK".equals(respuesta)) {
 				return true;
 			}
 			else {
@@ -170,18 +148,19 @@ public class EV_CP_M {
 
 	private boolean conectarCentral() {
 		try {
-			ChargingPoint temp= new ChargingPoint(cpId, "Temporal", 0.15);
-			this.conector = new CentralConnector(hostCentral, puertoCentral, dirKafka, temp);
-			boolean exito= conector.registrarCentral();
-			
-			if(exito) {
-				System.out.println("Monitor registrado en la Central para CP: " + cpId);
-                return true;
-            } 
-			else {
-                System.err.println("Error en la monitorización del CP con la Central");
-                return false;
-			}
+			Properties propiedades= new Properties();
+			propiedades.put("bootstrap.servers", dirKafka);
+			propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+		    propiedades.put("acks", "1");
+		    KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
+		    
+		    String registroStr = String.format("Monitor_Registro|%s", cpId);
+		    ProducerRecord<String, String> record = new ProducerRecord<>("monitor-registro", cpId, registroStr);
+		    productor.send(record);
+		    System.out.println("Monitor registrado en la Central para CP: " + cpId);
+	        productor.close();
+	        return true;
 		}
 		catch(Exception e) {
 			 System.err.println("Error en la conexion con la Central: " + e.getMessage());
@@ -190,25 +169,52 @@ public class EV_CP_M {
 	}
 	
 	private void reportarAveria() {
-		if(conector !=null) {
-			System.out.println("Reportando avería a la Central...");
-			conector.reportarAveria();
+		try {
+			Properties propiedades = new Properties();
+			propiedades.put("bootstrap.servers", dirKafka);
+			propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
+	        
+	        String mensaje="Averia|" +cpId;
+	        ProducerRecord<String, String> record = new ProducerRecord<>("fallo-cp", cpId, mensaje);
+	        productor.send(record);
+	        System.out.println("Avería reportada a Central");
+	        productor.close();
+		}
+		catch(Exception e) {
+	        System.err.println("Error reportando la avería: " + e.getMessage());
+
 		}
 	}
 	
 	private void reportarRecuperacion() {
-		if(conector !=null) {
-			System.out.println("Reportando recuperación a la Central...");
-			conector.reportarRecuperacion();
+		try {
+			Properties propiedades = new Properties();
+			propiedades.put("bootstrap.servers", dirKafka);
+			propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
+	        
+	        String mensaje="Recuperacion|" +cpId;
+	        ProducerRecord<String, String> record = new ProducerRecord<>("recuperacion-cp", cpId, mensaje);
+	        productor.send(record);
+	        System.out.println("Recuperacion reportada a Central");
+	        productor.close();
+		}
+		catch(Exception e) {
+	        System.err.println("Error reportando la recuperacion: " + e.getMessage());
+
 		}
 	}
 	
 	private void mostrarMenu() {
 		System.out.println("\n--- MENÚ MONITOR CP " + cpId + " ---");
         System.out.println("1. Verificar estado del Engine");
-        System.out.println("2. Forzar reporte de avería a Central");
-        System.out.println("3. Forzar reporte de recuperación a Central");
-        System.out.println("4. Salir");
+        System.out.println("2. Verificar estado seguido (cada 2 segundos)");
+        System.out.println("3. Reportar avería a Central");
+        System.out.println("4. Reportar recuperación a Central");
+        System.out.println("5. Salir");
         System.out.print("Seleccione opción: ");
 	}
 	
@@ -218,7 +224,7 @@ public class EV_CP_M {
 		}
 		catch(Exception e) {
 			scanner.nextLine();
-			System.out.println("Opción incorrecta. Introduce un número del 1 al 4.");
+			System.out.println("Opción incorrecta. Introduce un número del 1 al 5.");
             return -1;
 		}
 	}
@@ -229,17 +235,20 @@ public class EV_CP_M {
 				verificarEstado();
 				break;
 			case 2:
-				simularAveria();
+				verificarEstadoAuto();
 				break;
 			case 3:
-				simularRecuperacion();
+				simularAveria();
 				break;
 			case 4:
+				simularRecuperacion();
+				break;
+			case 5:
 				System.out.println("Saliendo del monitor...");
                 ejecucion = false;
                 break;
             default:
-            	System.out.println("Opción incorrecta. Introduce un número del 1 al 4.");
+            	System.out.println("Opción incorrecta. Introduce un número del 1 al 5.");
 		}
 	}
 	
@@ -250,6 +259,59 @@ public class EV_CP_M {
 		}
 		else {
 			 System.out.println("Engine funciona mal");
+		}
+	}
+	
+	//se usa una funcion lambda para que se haga cada vez que se cree un nuevo hilo
+	//Con un hilo lo que hace es verificar el estado del engine cada 2 segundos y se detiene al pulsar enter, se puede seguir usando el menu mientras se ejecuta
+	private void verificarEstadoAuto() {
+		System.out.println("Iniciando verificación automatica del engine (presione Enter para detener)...");
+		scanner.nextLine();
+		
+		Thread hilo = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				boolean verificar=true;
+				while(verificar && ejecucion) {
+					try {
+						boolean estado=verificarEstadoEngine();
+						if (estado) {
+	                        System.out.println("Engine OK - " + java.time.LocalTime.now());
+	                    } 
+						else {
+	                        System.out.println("Engine KO - " + java.time.LocalTime.now());
+	                        reportarAveria();
+	                    }
+						
+						//entrada del usuario sin bloquear
+						if(System.in.available()>0) {
+							verificar=false;
+							System.out.println("Verificación estado detenida");
+						}
+						
+						Thread.sleep(2000);
+					} 
+					catch (IOException e) {
+	                    //si no se pone nada se sigue
+	                }
+					catch(Exception e) {
+						System.err.println("Error en verificación automatica: " + e.getMessage());
+						break;
+					}
+				}
+			}
+		});
+		
+		hilo.start();
+		
+		//parte de parar con enter
+		try {
+			System.in.read();
+			hilo.interrupt();
+			System.out.println("Verificación automatica finalizada");
+		}
+		catch(IOException e) {
+			System.err.println("Error leyendo la entrada: " + e.getMessage());
 		}
 	}
 	

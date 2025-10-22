@@ -13,6 +13,14 @@ public class EV_CP_E {
 	private String dirKafka;
 	
 	public static void main(String[] args) {
+		//para que no aparezcan los mensajes de kafka en la central 
+    	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.kafka", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.zookeeper", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "error");
+    	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
+		
 		if (args.length < 5) {
             System.out.println("Uso: java EV_CP_E <cp_id> <ubicacion> <precio_kwh> <host:port> <dirKafka>");
             //System.out.println("Ej: java EV_CP_E CP001 \"Calle Principal 123\" 0.15 localhost:9090 localhost:9092");
@@ -40,7 +48,7 @@ public class EV_CP_E {
 			  this.scanner= new Scanner(System.in);
 			  
 			  this.cp=new ChargingPoint(cpId, ubicacion, precioKwh);
-			  boolean registro=cp.registroEnCentral(host, puerto, dirKafka);
+			  boolean registro=cp.registroEnCentral(dirKafka);
 			  
 			  if(!registro) {
 				  System.err.println("No se ha registrado el CP en la central");
@@ -71,7 +79,7 @@ public class EV_CP_E {
 	
 	private void mostrarMenu() {
 		 System.out.println("\n--- MENÚ PRINCIPAL ---");
-	        System.out.println("1.  Iniciar suministro MANUAL");
+	        System.out.println("1.  Iniciar suministro manual");
 	        System.out.println("2.  Finalizar suministro");
 	        System.out.println("3.  Activar CP");
 	        System.out.println("4.  Parar CP");
@@ -80,7 +88,7 @@ public class EV_CP_E {
 	        System.out.println("7.  Estado completo");
 	        //System.out.println("8.  Verificar conexión con Central");
 	        //System.out.println("9.  Enviar test a Kafka");
-	        System.out.println("8. Salir");
+	        System.out.println("8.	Salir");
 	        System.out.print("Seleccione opción: ");
 	}
 	

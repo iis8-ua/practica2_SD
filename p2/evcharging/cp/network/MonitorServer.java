@@ -22,7 +22,7 @@ public class MonitorServer {
 		try {
 			serverSocket= new ServerSocket(puerto);
 			ejecucion=true;
-			System.out.println("MonitorServer iniciado en puerto " + puerto);
+			//System.out.println("MonitorServer iniciado en puerto " + puerto);
 			
 			while(ejecucion) {
 				try {
@@ -73,7 +73,7 @@ public class MonitorServer {
 	 private void procesarConexion(Socket socket) {
 		 try { 
 	         String mensaje = leerDatos(socket);
-	         System.out.println("Se ha recibido: " + mensaje);
+	         //System.out.println("Se ha recibido: " + mensaje);
 	         
 	         if("Comprobar_Funciona".equals(mensaje)) {
 	        	 if(cp.getFunciona()) {
