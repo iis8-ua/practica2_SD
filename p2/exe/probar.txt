@@ -14,6 +14,7 @@ bin/kafka-topics.sh --create --topic recuperacion-cp --bootstrap-server localhos
 bin/kafka-topics.sh --create --topic central-to-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic sistema-eventos --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic monitor-registro --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic ticket --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 
 #Ver los topics
 bin/kafka-topics.sh --list --bootstrap-server localhost:9092

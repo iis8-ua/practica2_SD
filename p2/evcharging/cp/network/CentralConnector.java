@@ -29,7 +29,7 @@ public class CentralConnector {
             props.put("acks", "1");
             props.put("retries", 3);
             this.productor = new KafkaProducer<>(props);
-			System.out.println("Kafka configurado correctamente");
+			//System.out.println("Kafka configurado correctamente");
 		}
 		catch(Exception e) {
 			System.err.println("Error configurado correctamente " + e.getMessage());
@@ -96,7 +96,7 @@ public class CentralConnector {
 			
 			String estadoStr=String.format("Actualizacion_Estado|%s|%s|%s", cp.getId(), cp.getEstado().name(), funciona);
 			enviarEventoKafka("cp-estado", estadoStr);
-			System.out.println("Estado actualizado en la Central");
+			//System.out.println("Estado actualizado en la Central");
 			
 		}
 		catch(Exception e) {
@@ -126,8 +126,8 @@ public class CentralConnector {
 	public void enviarActualizacionConsumo(double consumoActual, double importeActual) {
 		try {
 			String mensaje = String.format("Actualización_Consumo|%s|%.2f|%.2f", cp.getId(), consumoActual, importeActual);
-            enviarEventoKafka("actualización-recarga", mensaje);
-            System.out.println("Consumo actualizado en la Central");
+            enviarEventoKafka("actualizacion-recarga", mensaje);
+            //System.out.println("Consumo actualizado en la Central");
 		}
 		catch(Exception e) {
 			System.err.println("Error actualizando consumo: " + e.getMessage());
@@ -139,7 +139,7 @@ public class CentralConnector {
 		try {
 			String mensaje="Averia|" + cp.getId();
 			enviarEventoKafka("fallo-cp", mensaje);
-			System.out.println("Avería reportada a la Central");
+			//System.out.println("Avería reportada a la Central");
 		}
 		catch(Exception e) {
 			System.err.println("Error reportando la avería: " + e.getMessage());
@@ -150,11 +150,21 @@ public class CentralConnector {
 		try {
 			String mensaje="Recuperacion|" + cp.getId();
 			enviarEventoKafka("recuperacion-cp", mensaje);
-			System.out.println("Recuperacion reportada a la Central");
+			//System.out.println("Recuperacion reportada a la Central");
 		}
 		catch(Exception e) {
 			System.err.println("Error reportando la recuperacion: " + e.getMessage());
 		}
+	}
+	
+	public void enviarTicket(String conductorId, double consumo, double importe) {
+		try {
+			String mensaje = String.format("Ticket|%s|%.2f|%.2f", conductorId, consumo, importe);
+			enviarEventoKafka("ticket", mensaje);
+		}
+		catch(Exception e) {
+	        System.err.println("Error enviando ticket: " + e.getMessage());
+	    }
 	}
 	
 	private void enviarEventoKafka(String tema, String mensaje) {
@@ -166,7 +176,7 @@ public class CentralConnector {
 		try {
 			ProducerRecord<String, String> record= new ProducerRecord<>(tema, cp.getId(), mensaje);
 			productor.send(record);
-			System.out.println("Evento enviado a Kafka --> Tema: " + tema + ", Mensaje: " + mensaje);
+			//System.out.println("Evento enviado a Kafka --> Tema: " + tema + ", Mensaje: " + mensaje);
 		}
 		catch(Exception e) {
 			System.err.println("Error de Kafka en el envio del evento a la central: " + e.getMessage());

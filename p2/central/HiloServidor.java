@@ -43,7 +43,7 @@ public class HiloServidor extends Thread {
 	 }
 	
 	private void procesarMensaje(String tema, String cpId, String mensaje) {
-		System.out.println("Se ha recibido - Tema: " + tema + ", CP: " + cpId + ", Mensaje: " + mensaje);
+		//System.out.println("Se ha recibido - Tema: " + tema + ", CP: " + cpId + ", Mensaje: " + mensaje);
 		
 		try {
 			switch (tema) {
@@ -62,11 +62,14 @@ public class HiloServidor extends Thread {
 	            case "fallo-cp":
 	                procesarAveria(cpId, mensaje);
 	                break;
-	            case "recuperación-cp":
+	            case "recuperacion-cp":
 	                procesarRecuperacion(cpId, mensaje);
 	                break;
 	            case "monitor-registro":
 	            	procesarRegistroMonitor(cpId, mensaje);
+	            	break;
+	            case "ticket":
+	            	procesarTicket(cpId, mensaje);
 	            	break;
 	            default:
 	                System.out.println("Tema no reconocido: " + tema);
@@ -86,7 +89,12 @@ public class HiloServidor extends Thread {
 	}
 
 	private void procesarRecuperacion(String cpId, String mensaje) {
-		System.out.println("Recuperacion reportada en CP: " + cpId);
+		if(mensaje.startsWith("Recuperacion_Reporte")) {
+			System.out.println("Reporte del monitor, recuperacion en CP: " + cpId);
+		}
+		else {
+			System.out.println("Recuperacion en CP: " + cpId);
+		}
 		
 		String confirmacion = "Recuperacion_ACK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
@@ -96,7 +104,12 @@ public class HiloServidor extends Thread {
 	}
 
 	private void procesarAveria(String cpId, String mensaje) {
-		System.out.println("Averia reportada en CP: " + cpId);
+		if(mensaje.startsWith("Averia_Reporte")) {
+			System.out.println("Reporte del monitor, averia en CP: " + cpId);
+		}
+		else {
+			System.out.println("Averia en CP: " + cpId);
+		}
 		
 		String confirmacion = "Averia_ACK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
@@ -108,10 +121,10 @@ public class HiloServidor extends Thread {
 
 	private void procesarActualizacionRecarga(String cpId, String mensaje) {
 		String[] partes = mensaje.split("\\|");
-        String consumo = partes[1];
+        String consumo = partes[3];
         String importe = partes[2];
         
-        System.out.println("Recarga CP " + cpId + ": " + consumo + " kW - " + importe + " €");
+        System.out.printf("CP: %s | Consumo: %s kW | Importe: %s €%n", cpId, consumo, importe);
         
         String confirmacion = "Consumo_OK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
@@ -151,6 +164,17 @@ public class HiloServidor extends Thread {
         String confirmacion = "Registro_OK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
 		
+	}
+	
+	private void procesarTicket(String cpId, String mensaje) {
+		String[] partes = mensaje.split("\\|");
+	    String conductorId = partes[1];
+	    String consumo = partes[3];
+	    String importe = partes[2];
+	    
+	    System.out.printf("Ticket enviado a %s - %s: %s kW (%s €)%n", conductorId, cpId, consumo, importe);
+	    String confirmacion = "Ticket_ACK|" + cpId;
+        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
 	}
 
 	public void detener() {

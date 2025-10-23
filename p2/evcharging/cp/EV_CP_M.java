@@ -25,7 +25,7 @@ public class EV_CP_M {
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "error");
     	System.setProperty("org.slf4j.simpleLogger.log.kafka", "error");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.zookeeper", "error");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "off");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
     	
         if (args.length < 4) {
@@ -132,7 +132,7 @@ public class EV_CP_M {
 			escribirDatos(s, "Comprobar_Funciona");
 			
 			String respuesta= leerDatos(s);
-			System.out.println("Respuesta health check: " + respuesta); 
+			System.out.println("Respuesta funcionamiento: " + respuesta); 
 			if ("Funciona_OK".equals(respuesta)) {
 				return true;
 			}
@@ -176,7 +176,7 @@ public class EV_CP_M {
 			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
 	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
 	        
-	        String mensaje="Averia|" +cpId;
+	        String mensaje="Averia_Reporte|" +cpId;
 	        ProducerRecord<String, String> record = new ProducerRecord<>("fallo-cp", cpId, mensaje);
 	        productor.send(record);
 	        System.out.println("Avería reportada a Central");
@@ -196,7 +196,7 @@ public class EV_CP_M {
 			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
 	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
 	        
-	        String mensaje="Recuperacion|" +cpId;
+	        String mensaje="Recuperacion_Reporte|" +cpId;
 	        ProducerRecord<String, String> record = new ProducerRecord<>("recuperacion-cp", cpId, mensaje);
 	        productor.send(record);
 	        System.out.println("Recuperacion reportada a Central");
@@ -212,8 +212,8 @@ public class EV_CP_M {
 		System.out.println("\n--- MENÚ MONITOR CP " + cpId + " ---");
         System.out.println("1. Verificar estado del Engine");
         System.out.println("2. Verificar estado seguido (cada 2 segundos)");
-        System.out.println("3. Reportar avería a Central");
-        System.out.println("4. Reportar recuperación a Central");
+        System.out.println("3. Forzar reporte de avería a Central");
+        System.out.println("4. Forzar reporte de recuperación a Central");
         System.out.println("5. Salir");
         System.out.print("Seleccione opción: ");
 	}
@@ -271,8 +271,7 @@ public class EV_CP_M {
 		Thread hilo = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				boolean verificar=true;
-				while(verificar && ejecucion) {
+				while(!Thread.currentThread().isInterrupted() && ejecucion) {
 					try {
 						boolean estado=verificarEstadoEngine();
 						if (estado) {
@@ -282,17 +281,11 @@ public class EV_CP_M {
 	                        System.out.println("Engine KO - " + java.time.LocalTime.now());
 	                        reportarAveria();
 	                    }
-						
-						//entrada del usuario sin bloquear
-						if(System.in.available()>0) {
-							verificar=false;
-							System.out.println("Verificación estado detenida");
-						}
-						
 						Thread.sleep(2000);
 					} 
-					catch (IOException e) {
+					catch (InterruptedException e) {
 	                    //si no se pone nada se sigue
+						break;
 	                }
 					catch(Exception e) {
 						System.err.println("Error en verificación automatica: " + e.getMessage());

@@ -18,7 +18,7 @@ public class EV_CP_E {
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "error");
     	System.setProperty("org.slf4j.simpleLogger.log.kafka", "error");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.zookeeper", "error");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "off");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
 		
 		if (args.length < 5) {
@@ -88,7 +88,7 @@ public class EV_CP_E {
 	        System.out.println("7.  Estado completo");
 	        //System.out.println("8.  Verificar conexión con Central");
 	        //System.out.println("9.  Enviar test a Kafka");
-	        System.out.println("8.	Salir");
+	        System.out.println("8.  Salir");
 	        System.out.print("Seleccione opción: ");
 	}
 	
@@ -126,12 +126,6 @@ public class EV_CP_E {
             case 7:
                 mostrarEstadoCompleto();
                 break;
-            /*case 8:
-                verificarConexion();
-                break;
-            case 9:
-                enviarTestKafka();
-                break;*/
             case 8:
                 System.out.println("Saliendo...");
                 funcionamiento = false;
@@ -149,9 +143,11 @@ public class EV_CP_E {
 		
 		if(exito) {
 			System.out.println("Suministro manual inciado para: " + conductorId);
+			System.out.println("Recarga en progreso...");
+		    System.out.println("Pulse 2 para finalizar el suministro");
 		}
 		else {
-			System.out.println("No se ha podido iniciar el suministro manual");
+			//System.out.println("No se ha podido iniciar el suministro manual");
 		}
 	}
 	
@@ -170,13 +166,13 @@ public class EV_CP_E {
 	private void activarCP() {
 		System.out.println("Activando CP con id: " + cp.getId());
 		cp.activar();
-		System.out.println("CP activado");
+		//System.out.println("CP activado");
 	}
 	
 	private void pararCP() {
 		System.out.println("Parando CP con id: " + cp.getId());
 		cp.parar();
-		System.out.println("CP fuera de servicio");
+		//System.out.println("CP fuera de servicio");
 	}
 	
 	private void simularAveria() {
@@ -194,22 +190,7 @@ public class EV_CP_E {
 	private void mostrarEstadoCompleto() {
 		cp.imprimirInfoCP();
 	}
-	
-	/*private void verificarConexion() {
-        System.out.println("⏳ Comprobando estado de la conexión...");
-        
-        if (cp.getConector().estaConectado()) {
-            System.out.println("Conectado a Central");
-        } else {
-            System.out.println("Desconectado de Central");
-        }
-    }
-    
-    private void enviarTestKafka() {
-        System.out.println("Enviando mensaje de prueba a Kafka...");
-        cp.getConector().enviarActualizacionConsumo(2.5, 0.375);
-        System.out.println("Mensaje de prueba enviado a Kafka");
-    }*/
+
 	
 	private void detener() {
 		funcionamiento =false;

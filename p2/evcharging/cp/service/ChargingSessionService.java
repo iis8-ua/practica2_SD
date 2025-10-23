@@ -54,7 +54,20 @@ public class ChargingSessionService {
 		}
 		
 		System.out.println("Suministro finalizado para: " + cp.getConductorActual());
-        System.out.println("Factura --> Consumo: " + cp.getConsumoActual() + " kW, Importe: " + cp.getImporteActual() + " €");
+		System.out.println("\n=== FACTURA FINAL ===");
+	    System.out.println("CP: " + cp.getId());
+	    System.out.println("Conductor: " + cp.getConductorActual());
+	    System.out.println("Ubicación: " + cp.getUbicacion());
+	    System.out.println("Precio: " + cp.getPrecioKwh() + " €/kWh");
+	    System.out.println("────────────────────");
+	    System.out.printf("Consumo total: %.2f kW%n", cp.getConsumoActual());
+	    System.out.printf("Importe total: %.2f €%n", cp.getImporteActual());
+	    System.out.println("=====================\n");
+	    
+	    if(cp.getConector() != null) {
+	    	cp.getConector().enviarTicket(cp.getConductorActual(), cp.getConsumoActual(), cp.getImporteActual());
+	    }
+	    
         cp.setEstado(CPState.ACTIVADO);
         cp.setConductorActual(null);
 	}

@@ -18,7 +18,7 @@ public class EV_Central {
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "error");
     	System.setProperty("org.slf4j.simpleLogger.log.kafka", "error");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.zookeeper", "error");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "error");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "off");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
     	
         if (args.length < 1) {
