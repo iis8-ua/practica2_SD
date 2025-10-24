@@ -6,6 +6,13 @@ CREATE TABLE driver (
     telefono VARCHAR(20),
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+INSERT INTO driver (id, nombre, saldo, email, telefono) VALUES
+('DRV001', 'Carlos Gómez', 230.50, 'carlos.gomez@example.com', '666111222'),
+('DRV002', 'María Ruiz', 120.75, 'maria.ruiz@example.com', '666333444'),
+('DRV003', 'Lucía Fernández', 310.00, 'lucia.fernandez@example.com', '666555666'),
+('DRV004', 'Juan López', 90.25, 'juan.lopez@example.com', '666777888'),
+('DRV005', 'Pedro Sánchez', 180.00, 'pedro.sanchez@example.com', '666999000');
+
 CREATE TABLE charging_point (
     id VARCHAR(20) PRIMARY KEY,
     ubicacion VARCHAR(200) NOT NULL,
@@ -19,6 +26,13 @@ CREATE TABLE charging_point (
     ultima_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (conductor_actual) REFERENCES driver(id)
 );
+INSERT INTO charging_point (id, ubicacion, precio_kwh, estado, funciona, registrado_central) VALUES
+('CP001', 'Calle Mayor 15, Madrid', 0.25, 'ACTIVADO', TRUE, TRUE),
+('CP002', 'Av. Libertad 45, Valencia', 0.30, 'ACTIVADO', TRUE, TRUE),
+('CP003', 'Plaza España 10, Sevilla', 0.27, 'PARADO', TRUE, TRUE),
+('CP004', 'Calle Real 50, Bilbao', 0.29, 'AVERIADO', FALSE, TRUE),
+('CP005', 'Av. de Andalucía 123, Málaga', 0.26, 'DESCONECTADO', TRUE, FALSE);
+
 CREATE TABLE monitor (
     id INT AUTO_INCREMENT PRIMARY KEY,
     cp_id VARCHAR(20) NOT NULL,
@@ -31,6 +45,13 @@ CREATE TABLE monitor (
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cp_id) REFERENCES charging_point(id) ON DELETE CASCADE
 );
+INSERT INTO monitor (cp_id, host_engine, puerto_engine, ip_central, puerto_central, kafka_dir) VALUES
+('CP001', 'localhost', 8080, 'localhost', 8081, 'localhost:9092'),
+('CP002', 'localhost', 8082, 'localhost', 8081, 'localhost:9092'),
+('CP003', 'localhost', 8084, 'localhost', 8081, 'localhost:9092'),
+('CP004', 'localhost', 8086, 'localhost', 8081, 'localhost:9092'),
+('CP005', 'localhost', 8088, 'localhost', 8081, 'localhost:9092');
+
 CREATE TABLE charging_session (
     session_id VARCHAR(50) PRIMARY KEY,
     cp_id VARCHAR(20) NOT NULL,
@@ -44,6 +65,12 @@ CREATE TABLE charging_session (
     FOREIGN KEY (cp_id) REFERENCES charging_point(id),
     FOREIGN KEY (conductor_id) REFERENCES driver(id)
 );
+INSERT INTO charging_session (session_id, cp_id, conductor_id, tipo, inicio, fin, estado, energia_total, importe_total) VALUES
+('SES001', 'CP001', 'DRV001', 'Manual', NOW() - INTERVAL 2 HOUR, NOW() - INTERVAL 1 HOUR, 'FINALIZADA', 12.5, 3.12),
+('SES002', 'CP002', 'DRV002', 'Automatico', NOW() - INTERVAL 3 HOUR, NOW() - INTERVAL 2 HOUR, 'FINALIZADA', 20.7, 6.21),
+('SES003', 'CP003', 'DRV003', 'Manual', NOW() - INTERVAL 1 HOUR, NULL, 'EN_CURSO', 5.8, 1.56),
+('SES004', 'CP004', 'DRV004', 'Automatico', NOW() - INTERVAL 4 HOUR, NOW() - INTERVAL 3 HOUR, 'FINALIZADA', 10.0, 2.90);
+
 CREATE TABLE charging_update (
     id INT AUTO_INCREMENT PRIMARY KEY,
     session_id VARCHAR(50) NOT NULL,
@@ -54,6 +81,14 @@ CREATE TABLE charging_update (
     FOREIGN KEY (session_id) REFERENCES charging_session(session_id),
     FOREIGN KEY (cp_id) REFERENCES charging_point(id)
 );
+
+INSERT INTO charging_update (session_id, cp_id, consumo, importe, timestamp) VALUES
+('SES001', 'CP001', 4.2, 1.05, NOW() - INTERVAL 110 MINUTE),
+('SES001', 'CP001', 8.3, 2.07, NOW() - INTERVAL 80 MINUTE),
+('SES002', 'CP002', 10.5, 3.15, NOW() - INTERVAL 160 MINUTE),
+('SES002', 'CP002', 20.7, 6.21, NOW() - INTERVAL 130 MINUTE),
+('SES003', 'CP003', 2.8, 0.75, NOW() - INTERVAL 30 MINUTE);
+
 CREATE TABLE event_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
     cp_id VARCHAR(20),
@@ -72,3 +107,10 @@ CREATE TABLE event_log (
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cp_id) REFERENCES charging_point(id) ON DELETE SET NULL
 );
+INSERT INTO event_log (cp_id, tipo_evento, descripcion) VALUES
+('CP001', 'REGISTRO_CP', 'CP001 registrado correctamente en Central'),
+('CP001', 'AUTORIZACION_OK', 'Autorizado conductor DRV001'),
+('CP001', 'CONSUMO_UPDATE', 'Consumo actualizado: 12.5 kWh'),
+('CP002', 'REGISTRO_CP', 'CP002 registrado correctamente en Central'),
+('CP004', 'AVERIA', 'Avería detectada en el CP004 - fallo hardware'),
+('CP004', 'RECUPERACION', 'Recuperación reportada tras mantenimiento');
