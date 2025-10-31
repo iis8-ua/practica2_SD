@@ -23,7 +23,8 @@ public class ServidorConcurrente {
     			"fallo-cp",
     			"recuperacion-cp",
     			"monitor-registro",
-    			"ticket"
+    			"ticket",
+    			"driver-solicitud"
     	));
     }
     

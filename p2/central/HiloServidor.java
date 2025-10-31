@@ -70,6 +70,8 @@ public class HiloServidor extends Thread {
 	            	break;
 	            case "ticket":
 	            	procesarTicket(cpId, mensaje);
+	            case "driver-solicitud":
+	            	procesarSolicitudDriver(cpId, mensaje);
 	            	break;
 	            default:
 	                System.out.println("Tema no reconocido: " + tema);
@@ -79,6 +81,12 @@ public class HiloServidor extends Thread {
 			System.err.println("Error procesando el mensaje: " + e.getMessage());
 		}
 
+	}
+
+	private void procesarSolicitudDriver(String driverId, String mensaje) {
+		 System.out.println("Solicitud recibida de driver: " + driverId);
+		 
+		 String[] partes= mensaje.split("\\|");
 	}
 
 	private void procesarRegistroMonitor(String cpId, String mensaje) {

@@ -14,11 +14,13 @@ public class EV_CP_E {
 	
 	public static void main(String[] args) {
 		//para que no aparezcan los mensajes de kafka en la central 
-    	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "error");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "error");
-    	System.setProperty("org.slf4j.simpleLogger.log.kafka", "error");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.zookeeper", "error");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "off");
+    	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "WARN");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "WARN");
+    	System.setProperty("org.slf4j.simpleLogger.log.kafka", "WARN");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients", "WARN");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.common", "WARN");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.network", "ERROR");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "WARN");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
 		
 		if (args.length < 5) {
@@ -55,9 +57,11 @@ public class EV_CP_E {
 				  return;
 			  }
 			  
-			  this.monitor= new MonitorServer(cp, 8080);
+			  /*this.monitor= new MonitorServer(cp, 8080);
 			  Thread hiloMonitor = new Thread(() -> monitor.iniciar());
 			  hiloMonitor.start();
+			  //No tiene que iniciar automaticamente el monitor son procesos independientes
+			  */
 			  this.funcionamiento=true;
 			  ejecutarBuclePrincipal();
 		  }
@@ -86,8 +90,6 @@ public class EV_CP_E {
 	        System.out.println("5.  Simular avería");
 	        System.out.println("6.  Reparar avería");
 	        System.out.println("7.  Estado completo");
-	        //System.out.println("8.  Verificar conexión con Central");
-	        //System.out.println("9.  Enviar test a Kafka");
 	        System.out.println("8.  Salir");
 	        System.out.print("Seleccione opción: ");
 	}
