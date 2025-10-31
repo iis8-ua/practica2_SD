@@ -28,6 +28,10 @@ javac -cp "p2/libs/*" p2/central/*.java
 #Iniciar KAFKA
 cd ~/Kafka
 bin/kafka-server-start.sh config/server.properties
+UUID: bin/kafka-storage.sh format \
+  --config config/server.properties \
+  --cluster-id $(bin/kafka-storage.sh random-uuid)
+
 
 #Iniciar Central
 java -cp ".:p2/libs/*:p2" p2.central.EV_Central localhost:9092
