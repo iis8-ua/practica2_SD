@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: zookeeper:3.9.0
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports:
+      - "2181:2181"
+    networks:
+      - evnet
+
+  kafka:
+    image: apache/kafka:3.7.0
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+    ports:
+      - "9092:9092"
+    networks:
+      - evnet
+
+  mariadb:
+    image: mariadb:10.11
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=ev_charging_system
+      - MYSQL_USER=evuser
+      - MYSQL_PASSWORD=evpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./central/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - evnet
+
+  central:
+    build: ./central
+    depends_on:
+      - kafka
+      - mariadb
+    ports:
+      - "8081:8081"
+    networks:
+      - evnet
+
+  cp_engine_1:
+    build:
+      context: ./evcharging/cp
+      args:
+        MODULE: EV_CP_E
+    environment:
+      - CP_ID=CP001
+    networks:
+      - evnet
+
+  cp_monitor_1:
+    build:
+      context: ./evcharging/cp
+      args:
+        MODULE: EV_CP_M
+    environment:
+      - CP_ID=CP001
+    networks:
+      - evnet
+
+volumes:
+  mariadb_data:
+
+networks:
+  evnet:
+

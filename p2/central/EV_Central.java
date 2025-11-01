@@ -5,6 +5,8 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import java.util.Properties;
+import p2.db.DBManager;
+import java.sql.*;
 
 //El StringSerializer y StringDeserializer lo que hacen es la conversion de string a bytes y viceversa
 //ya que kafka trabaja con bytes
@@ -13,6 +15,11 @@ import java.util.Properties;
 public class EV_Central {
 
     public static void main(String[] args) {
+        try {
+           DBManager.connect();
+        }        catch (SQLException e) {
+           System.err.println("Error conectando a BD: " + e.getMessage());
+        }       
     	//para que no aparezcan los mensajes de kafka en la central 
     	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "WARN");
