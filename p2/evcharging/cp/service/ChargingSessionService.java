@@ -35,6 +35,11 @@ public class ChargingSessionService {
 					double consumoSegundo = 0.1;
 					cp.actualizarConsumo(consumoSegundo);
 					
+					//envia a la central la actulizacion del consumo en cada segundo como se indica en el enunciado
+					if(cp.getConector() !=null) {
+						cp.getConector().enviarActualizacionConsumo(cp.getConsumoActual(), cp.getImporteActual());
+					}
+					
 					Thread.sleep(1000);
 				}
 			}

@@ -15,6 +15,8 @@ bin/kafka-topics.sh --create --topic central-to-cp --bootstrap-server localhost:
 bin/kafka-topics.sh --create --topic sistema-eventos --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic monitor-registro --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic ticket --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic comandos-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
 
 #Ver los topics
 bin/kafka-topics.sh --list --bootstrap-server localhost:9092
@@ -28,10 +30,6 @@ javac -cp "p2/libs/*" p2/central/*.java
 #Iniciar KAFKA
 cd ~/Kafka
 bin/kafka-server-start.sh config/server.properties
-UUID: bin/kafka-storage.sh format \
-  --config config/server.properties \
-  --cluster-id $(bin/kafka-storage.sh random-uuid)
-
 
 #Iniciar Central
 java -cp ".:p2/libs/*:p2" p2.central.EV_Central localhost:9092

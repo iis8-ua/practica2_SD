@@ -4,7 +4,6 @@ import p2.evcharging.cp.network.CentralConnector;
 import java.io.*;
 import java.net.Socket;
 import java.util.Properties;
-import java.util.Scanner;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
@@ -15,8 +14,9 @@ public class EV_CP_M {
     private int puertoEngine;
     private String dirKafka;
     private boolean ejecucion;
+    private boolean inicio;
     private CentralConnector conector;
-    private Scanner scanner;
+    private Thread hilo;
     
     
     public static void main(String[] args) {
@@ -80,7 +80,6 @@ public class EV_CP_M {
             this.cpId = cpId;
             this.dirKafka = dirKafka;
             this.ejecucion = true;
-            this.scanner = new Scanner(System.in);
             
             if (!conectarCentral()) {
             	System.err.println("No se ha podido establecer conecion con la central. Saliendo...");
@@ -88,9 +87,11 @@ public class EV_CP_M {
             }
             
             System.out.println("Monitor iniciado para el CP: " + cpId);
-            System.out.println("Conectado al Engine en: " + hostEngine + ":" + puertoEngine);
             System.out.println("Conectado a Central en: " + dirKafka);
-            ejecutarBuclePrincipal();
+            verificarEstadoInicial();
+            verificarEstadoAuto();
+            mantenerEjecucion();
+            
     	}
     	catch(Exception e) {
     		System.err.println("Error en el inicio del monitor: " + e.getMessage());
@@ -101,6 +102,51 @@ public class EV_CP_M {
     }
     
 
+	private void verificarEstadoInicial() {
+		boolean estadoInicial=verificarEstadoEngine();
+		if(!estadoInicial) {
+			System.err.println("Engine no está disponible en " + hostEngine + ":" + puertoEngine);
+			reportarAveriaInicial();
+			inicio=false;
+		}
+		else {
+			System.out.println("Conectado al Engine en: " + hostEngine + ":" + puertoEngine);
+			inicio=true;
+		}
+	}
+
+	private void reportarAveriaInicial() {
+		try {
+			Properties propiedades= new Properties();
+			propiedades.put("bootstrap.servers", dirKafka);
+			propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+		    propiedades.put("acks", "1");
+		    KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
+		    
+		    String mensaje = "Averia_Inicial|" + cpId + "|Engine_no_disponible";
+	        ProducerRecord<String, String> record = new ProducerRecord<>("fallo-cp", cpId, mensaje);
+	        productor.send(record);
+	        System.out.println("Avería inicial reportada a central, engine no disponible al iniciar");
+	        productor.close();
+		}
+		catch(Exception e) {
+			System.err.println("Error reportando la avería inicial: " + e.getMessage());
+		}
+	}
+
+	private void mantenerEjecucion() {
+		try {
+			while (ejecucion && hilo != null && hilo.isAlive()) {
+                Thread.sleep(1000);
+            }
+        } 
+		catch (InterruptedException e) {
+            System.out.println("Monitor interrumpido");
+        }
+		
+	}
+
 	private void detener() {
 		ejecucion=false;
 		try {
@@ -108,8 +154,9 @@ public class EV_CP_M {
 				conector.cerrarConexiones();
 			}
 			
-			if(scanner !=null) {
-				scanner.close();
+			if(hilo !=null) {
+				hilo.interrupt();
+				hilo.join(2000);
 			}
 			
 			System.out.println("Monitor detenido");
@@ -119,28 +166,30 @@ public class EV_CP_M {
 		}
 	}
 
-	private void ejecutarBuclePrincipal() {
-		while(ejecucion) {
-			mostrarMenu();
-			int opcion= leerOpcion();
-			procesarOpcion(opcion);
-		}
-		
-	}
-
 	private boolean verificarEstadoEngine() {
 		try {
 			Socket s= new Socket(hostEngine, puertoEngine);
+			s.setSoTimeout(3000); 
 			escribirDatos(s, "Comprobar_Funciona");
 			
 			String respuesta= leerDatos(s);
-			System.out.println("Respuesta funcionamiento: " + respuesta); 
+			s.close();
 			if ("Funciona_OK".equals(respuesta)) {
 				return true;
 			}
 			else {
 				return false;
 			}
+		}
+		catch(java.net.ConnectException e) {
+			//cuando el engine cae
+			//System.err.println("Engine caido en " + hostEngine + ":" + puertoEngine);
+	        return false;
+		}
+		catch(java.net.SocketTimeoutException e) {
+			//cuando no responde
+			System.err.println("Engine no responde, timeout en la conexión");
+	        return false;
 		}
 		catch(IOException e) {
 			 System.err.println("Error verificando estado del Engine: " + e.getMessage());
@@ -210,115 +259,90 @@ public class EV_CP_M {
 		}
 	}
 	
-	private void mostrarMenu() {
-		System.out.println("\n--- MENÚ MONITOR CP " + cpId + " ---");
-        System.out.println("1. Verificar estado del Engine");
-        System.out.println("2. Verificar estado seguido (cada 2 segundos)");
-        System.out.println("3. Forzar reporte de avería a Central");
-        System.out.println("4. Forzar reporte de recuperación a Central");
-        System.out.println("5. Salir");
-        System.out.print("Seleccione opción: ");
-	}
-	
-	private int leerOpcion() {
-		try {
-			return scanner.nextInt();
-		}
-		catch(Exception e) {
-			scanner.nextLine();
-			System.out.println("Opción incorrecta. Introduce un número del 1 al 5.");
-            return -1;
-		}
-	}
-	
-	private void procesarOpcion(int opcion) {
-		switch(opcion) {
-			case 1:
-				verificarEstado();
-				break;
-			case 2:
-				verificarEstadoAuto();
-				break;
-			case 3:
-				simularAveria();
-				break;
-			case 4:
-				simularRecuperacion();
-				break;
-			case 5:
-				System.out.println("Saliendo del monitor...");
-                ejecucion = false;
-                break;
-            default:
-            	System.out.println("Opción incorrecta. Introduce un número del 1 al 5.");
-		}
-	}
-	
-	private void verificarEstado() {
-		boolean estado= verificarEstadoEngine();
-		if(estado) {
-			 System.out.println("Engine funcionando correctamente");
-		}
-		else {
-			 System.out.println("Engine funciona mal");
-		}
-	}
-	
 	//se usa una funcion lambda para que se haga cada vez que se cree un nuevo hilo
 	//Con un hilo lo que hace es verificar el estado del engine cada 2 segundos y se detiene al pulsar enter, se puede seguir usando el menu mientras se ejecuta
-	private void verificarEstadoAuto() {
-		System.out.println("Iniciando verificación automatica del engine (presione Enter para detener)...");
-		scanner.nextLine();
-		
-		Thread hilo = new Thread(new Runnable() {
+	private void verificarEstadoAuto() {		
+		hilo = new Thread(new Runnable() {
+			private boolean ultimo=false;
+			private boolean conectado=inicio;
+			private boolean primera=true;
 			@Override
 			public void run() {
 				while(!Thread.currentThread().isInterrupted() && ejecucion) {
 					try {
 						boolean estado=verificarEstadoEngine();
-						if (estado) {
+						
+						if(primera) {
+							primera=false;
+							conectado=estado;
+							ultimo=estado;
+							if(estado) {
+								System.out.println("Engine conectado - " + java.time.LocalTime.now());
+							}
+							else {
+								System.out.println("Engine desconectado - " + java.time.LocalTime.now());
+							}
+						}
+						
+						else if(estado && !conectado) {
+				            System.out.println("Engine conectado en: " + hostEngine + ":" + puertoEngine + " - " + java.time.LocalTime.now());
+				            reportarRecuperacion();
+				            conectado=true;
+				            ultimo=true;
+				        } 
+						else if(!estado && conectado) {
+							System.out.println("Engine desconectado a mitad de monitorización - " + java.time.LocalTime.now());
+	                        reportarAveria();
+	                        conectado = false;
+	                        ultimo = false;
+						}
+						else if (estado && ultimo && conectado) {
 	                        System.out.println("Engine OK - " + java.time.LocalTime.now());
 	                    } 
-						else {
-	                        System.out.println("Engine KO - " + java.time.LocalTime.now());
+						else if (estado && !ultimo && conectado) {
+	                        System.out.println("Engine Recuperado - " + java.time.LocalTime.now());
+	                        reportarRecuperacion();
+	                    } 
+						else if (!estado && ultimo && conectado) {
+							System.out.println("Engine Averiado - " + java.time.LocalTime.now());
 	                        reportarAveria();
-	                    }
-						Thread.sleep(2000);
+	                    } 
+						else if (!estado && !ultimo && conectado) {
+							System.out.println("Engine KO - " + java.time.LocalTime.now());
+	                    } 
+						else if (!estado && !conectado) {
+							if (System.currentTimeMillis() % 10000 < 1000) { // Mostrar cada 10 segundos
+	                            System.out.println("Engine sigue desconectado - " + java.time.LocalTime.now());
+	                        }
+	                    } 
+						ultimo=estado;
+						Thread.sleep(1000);
 					} 
 					catch (InterruptedException e) {
-	                    //si no se pone nada se sigue
+						System.out.println("Monitorización interrumpida");
 						break;
 	                }
 					catch(Exception e) {
 						System.err.println("Error en verificación automatica: " + e.getMessage());
-						break;
+						//se asume que si hay error es una averia
+						if(ultimo) {
+							reportarAveria();
+							ultimo=false;
+						}
+						try {
+	                        Thread.sleep(1000);
+	                    } 
+						catch (InterruptedException ie) {
+	                        break;
+	                    }
 					}
 				}
 			}
 		});
 		
 		hilo.start();
-		
-		//parte de parar con enter
-		try {
-			System.in.read();
-			hilo.interrupt();
-			System.out.println("Verificación automatica finalizada");
-		}
-		catch(IOException e) {
-			System.err.println("Error leyendo la entrada: " + e.getMessage());
-		}
 	}
 	
-	private void simularAveria() {
-		System.out.println("Simulando avería...");
-        reportarAveria();
-	}
-	
-	private void simularRecuperacion() {
-        System.out.println("Simulando recuperación...");
-        reportarRecuperacion();
-    }
  
     
     

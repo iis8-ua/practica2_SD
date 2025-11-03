@@ -103,7 +103,8 @@ public class EV_Driver {
 			 consumidor.subscribe(Arrays.asList(
 			            "driver-autorizacion-" + driverId,
 			            "driver-estado-" + driverId,
-			            "driver-ticket-" + driverId
+			            "driver-ticket-" + driverId,
+			            "driver-error-" + driverId
 			 ));
 		}
 		catch(Exception e) {
@@ -242,11 +243,12 @@ public class EV_Driver {
 				break;
 			}
 			
-			if(timeout<0) {
-				cp=null;
-				sesion=null;
-				System.err.println("Timeout expirado");
-			}
+		}
+		
+		if(timeout<0 && cp!=null) {
+			cp=null;
+			sesion=null;
+			System.err.println("Timeout expirado");
 		}
 	}
 	

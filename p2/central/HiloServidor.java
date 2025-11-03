@@ -80,13 +80,29 @@ public class HiloServidor extends Thread {
 		catch(Exception e) {
 			System.err.println("Error procesando el mensaje: " + e.getMessage());
 		}
-
 	}
 
 	private void procesarSolicitudDriver(String driverId, String mensaje) {
 		 System.out.println("Solicitud recibida de driver: " + driverId);
 		 
 		 String[] partes= mensaje.split("\\|");
+		 if(partes.length<4) {
+			 
+		 }
+	}
+	
+	private void enviarParar(String cpId) {
+		String mensaje="Parar";
+		ProducerRecord<String, String> record = new ProducerRecord<>("central-to-cp", cpId, mensaje);
+		productor.send(record);
+		System.out.println("Comando parar enviado a CP: " + cpId);
+	}
+	
+	private void enviarReanudar(String cpId) {
+		String mensaje="Reanudar";
+		ProducerRecord<String, String> record = new ProducerRecord<>("central-to-cp", cpId, mensaje);
+		productor.send(record);
+		System.out.println("Comando reanudar enviado a CP: " + cpId);
 	}
 
 	private void procesarRegistroMonitor(String cpId, String mensaje) {

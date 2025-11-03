@@ -1,7 +1,14 @@
 package p2.evcharging.cp;
 
 import p2.evcharging.cp.network.MonitorServer;
+
+import java.util.Arrays;
+import java.util.Properties;
 import java.util.Scanner;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import java.time.Duration;
 
 public class EV_CP_E {
 	private ChargingPoint cp;
@@ -57,11 +64,12 @@ public class EV_CP_E {
 				  return;
 			  }
 			  
-			  /*this.monitor= new MonitorServer(cp, 8080);
+			  this.monitor= new MonitorServer(cp, 8080);
 			  Thread hiloMonitor = new Thread(() -> monitor.iniciar());
 			  hiloMonitor.start();
-			  //No tiene que iniciar automaticamente el monitor son procesos independientes
-			  */
+			  
+			  iniciarConsumidorCentral();
+
 			  this.funcionamiento=true;
 			  ejecutarBuclePrincipal();
 		  }
@@ -72,6 +80,118 @@ public class EV_CP_E {
 			  detener();
 		  }
 	  }
+
+	private void iniciarConsumidorCentral() {
+		Thread hilo=new Thread (() -> {
+			Properties propiedades = new Properties();
+			propiedades.put("bootstrap.servers", dirKafka);
+			propiedades.put("group.id", "engine-" + cp.getId());
+			propiedades.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+			propiedades.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+			
+			try (KafkaConsumer<String, String> consumidor = new KafkaConsumer<>(propiedades)) {
+				consumidor.subscribe(Arrays.asList("comandos-cp"));
+				
+				while(funcionamiento) {
+					ConsumerRecords<String, String> records = consumidor.poll(Duration.ofMillis(100));
+					 for (ConsumerRecord<String, String> record : records) {
+		                    if (cp.getId().equals(record.key())) {
+		                        procesarComandoCentral(record.value());
+		                    }
+					 }
+				}
+						
+			}
+			catch(Exception e) {
+				System.err.println("Error en consumidor de Central: " + e.getMessage());
+			}
+		});
+		hilo.start(); 
+		
+	}
+
+	private void procesarComandoCentral(String comando) {
+		String[] partes=comando.split("\\|");
+		if(partes.length==0) {
+			return;
+		}
+		
+		String tipo= partes[0];
+		
+		switch(tipo) {
+			case "Autorizacion_Solicitud":
+				if(partes.length>4) {
+					String driverId=partes[1];
+					String sesionId=partes[2];
+					String cpId=partes[3];
+					procesarAutorizacionEngine(driverId, sesionId, cpId);
+				}
+				break;
+			
+			case "Inicio_Suministro":
+				if(partes.length >=3) {
+					String conductorId = partes[1];
+	                String sesionId = partes[2];
+	                iniciarSuministroAutomatico(conductorId, sesionId);
+				}
+				break;
+				
+			case "Parar":
+				if (cp.getEstado() == CPState.SUMINISTRANDO) {
+					System.out.println("Finalizando suministro...");
+	                cp.finalizarSuministro();
+	            }
+	            cp.parar();
+	            break;
+	            
+			case "Parada_Emergencia":
+				if(cp.getEstado() == CPState.SUMINISTRANDO) {
+					System.out.println("Finalizando suministro...");
+					cp.finalizarSuministro();
+				}
+				cp.parar();
+				break;
+				
+			case "Reanudar":
+				cp.activar();
+				break;
+				
+			default:
+	            System.out.println("Comando no reconocido: " + tipo);
+
+		}	
+		
+	}
+
+	private void iniciarSuministroAutomatico(String conductorId, String sesionId) {
+		boolean exito=cp.iniciarSuministroAutorizado(conductorId, sesionId);
+		
+		if(exito) {
+			System.out.println("Suministro automático iniciado para: " + conductorId);
+		}
+		else {
+			System.out.println("No se pudo iniciar el suministro automático");
+		}
+		
+	}
+
+	private void procesarAutorizacionEngine(String driverId, String sesionId, String cpId) {
+		if(cp.getEstado() ==CPState.ACTIVADO && cp.getFunciona()) {
+			//aceptada
+			if(cp.getConector() !=null) {
+				cp.getConector().enviarAutorizacion(sesionId, cpId, true);
+			}
+			 System.out.println("Autorización aceptada para driver: " + driverId);
+		}
+		//denegada
+		else {
+			if(cp.getConector() != null) {
+				cp.getConector().enviarAutorizacion(sesionId, driverId, false);
+				System.out.println("Autorización denegada para driver: " + driverId);
+			}
+		}
+		
+	}
 
 	private void ejecutarBuclePrincipal() {
 		while(funcionamiento) {
