@@ -3,6 +3,7 @@ package p2.evcharging.cp.network;
 import p2.evcharging.cp.ChargingPoint;
 import java.io.*;
 import java.net.Socket;
+import java.util.Locale;
 import java.util.Properties;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -69,7 +70,7 @@ public class CentralConnector {
 	public boolean registrarCentral() {
 		try {
             
-            String registroStr = String.format("Registro|%s|%s|%.2f", cp.getId(), cp.getUbicacion(), cp.getPrecioKwh());
+            String registroStr = String.format(Locale.US, "Registro|%s|%s|%.2f", cp.getId(), cp.getUbicacion(), cp.getPrecioKwh());
             enviarEventoKafka("cp-registro", registroStr);
             this.conectado=true;
             System.out.println("CP " + cp.getId() + " registrado en la Central");

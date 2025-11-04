@@ -24,8 +24,8 @@ bin/kafka-topics.sh --list --bootstrap-server localhost:9092
 
 #COMPILACION
 cd ~/eclipse-workspace/SD-base/src
-javac -cp "p2/libs/*" p2/evcharging/cp/*.java p2/evcharging/cp/network/*.java p2/evcharging/cp/service/*.java
-javac -cp "p2/libs/*" p2/central/*.java
+javac -cp "p2/libs/*" p2/db/DBManager.java p2/evcharging/cp/*.java p2/evcharging/cp/network/*.java p2/evcharging/cp/service/*.java
+javac -cp "p2/libs/*" p2/db/DBManager.java p2/central/*.java
 
 #Iniciar KAFKA
 cd ~/Kafka
@@ -35,7 +35,37 @@ bin/kafka-server-start.sh config/server.properties
 java -cp ".:p2/libs/*:p2" p2.central.EV_Central localhost:9092
 
 #Inicar Engine
-java -cp ".:p2/libs/*:p2" p2.evcharging.cp.EV_CP_E CP001 "Calle Principal 123" 0.15 localhost:9090 localhost:9092
+# CP001
+java -cp ".:p2/libs/*" p2.evcharging.cp.EV_CP_E CP001 "Calle Principal 123" 0.15 localhost:8080 localhost:9092
+
+# CP002 (en otra terminal)
+java -cp ".:p2/libs/*" p2.evcharging.cp.EV_CP_E CP002 "Avenida Central 456" 0.18 localhost:8081 localhost:9092
+
+# CP003 (en otra terminal)  
+java -cp ".:p2/libs/*" p2.evcharging.cp.EV_CP_E CP003 "Plaza Mayor 789" 0.16 localhost:8082 localhost:9092
 
 #Iniciar Monitor
 java -cp ".:p2/libs/*:p2" p2.evcharging.cp.EV_CP_M localhost 8080 CP001 localhost:9092
+
+
+Montar docker:
+cd p2/
+docker compose build
+docker compose up -d
+docker compose ps
+
+Borrar volumen:
+cd p2/
+docker-compose down
+docker volume rm p2_mariadb_data
+docker volume ls
+
+Entrar BD
+docker exec -it p2_mariadb_1 mysql -u evuser -p ev_charging_system
+ó
+docker exec -it p2-mariadb-1 mysql -u evuser -p ev_charging_system
+
+hacer los INSERTS
+docker exec -i p2_mariadb_1 mysql -u evuser -pevpass ev_charging_system < /home/israelizqdo/eclipse-workspace/SD-base/src/p2/central/sql/inserts.sql
+ó
+docker exec -i p2-mariadb-1 mysql -u evuser -pevpass ev_charging_system < /home/israelizqdo/eclipse-workspace/SD-base/src/p2/central/sql/inserts.sql

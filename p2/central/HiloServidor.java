@@ -2,6 +2,8 @@ package p2.central;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import java.sql.*;
+import p2.db.DBManager;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import java.time.Duration;
@@ -89,27 +91,22 @@ public class HiloServidor extends Thread {
 		 if(partes.length<4) {
 			 
 		 }
+		 
+		try {
+			registrarEvento(null, "SOLICITUD_DRIVER", "Solicitud recibida del driver " + driverId + " -> " + mensaje);
+        } 
+		catch (Exception e) {
+            System.err.println("[DB] Error registrando solicitud driver: " + e.getMessage());
+        }
 	}
 	
-	private void enviarParar(String cpId) {
-		String mensaje="Parar";
-		ProducerRecord<String, String> record = new ProducerRecord<>("central-to-cp", cpId, mensaje);
-		productor.send(record);
-		System.out.println("Comando parar enviado a CP: " + cpId);
-	}
-	
-	private void enviarReanudar(String cpId) {
-		String mensaje="Reanudar";
-		ProducerRecord<String, String> record = new ProducerRecord<>("central-to-cp", cpId, mensaje);
-		productor.send(record);
-		System.out.println("Comando reanudar enviado a CP: " + cpId);
-	}
 
 	private void procesarRegistroMonitor(String cpId, String mensaje) {
 		System.out.println("Monitor registrado para CP: " + cpId);
 	    
 	    String confirmacion = "Monitor_Registro_OK|" + cpId;
 	    productor.send(new ProducerRecord<>("central-to-monitor", cpId, confirmacion));
+	    registrarEvento(cpId, "REGISTRO_MONITOR", "Monitor registrado: " + mensaje);
 	}
 
 	private void procesarRecuperacion(String cpId, String mensaje) {
@@ -125,6 +122,33 @@ public class HiloServidor extends Thread {
         
         String confirmacion2= "Recuperacion|" + cpId;
         productor.send(new ProducerRecord<>("sistema-eventos", cpId, confirmacion2));
+        
+        registrarEvento(cpId, "RECUPERACION", "CP recuperado: " + mensaje);
+        
+        String estadoActual = obtenerEstadoActualCP(cpId);
+        
+        if ("PARADO".equals(estadoActual)) {
+            actualizarEstadoCP(cpId, "PARADO", true);
+        } 
+        else {
+            actualizarEstadoCP(cpId, "ACTIVADO", true);
+        }
+	}
+	
+	private String obtenerEstadoActualCP(String cpId) {
+	    try (Connection conn = DBManager.getConnection();
+	         PreparedStatement ps = conn.prepareStatement(
+	                 "SELECT estado FROM charging_point WHERE id=?")) {
+	        ps.setString(1, cpId);
+	        ResultSet rs = ps.executeQuery();
+	        
+	        if (rs.next()) {
+	            return rs.getString("estado");
+	        }
+	    } catch (SQLException e) {
+	        System.err.println("[DB] Error consultando estado CP: " + e.getMessage());
+	    }
+	    return "ACTIVADO";
 	}
 
 	private void procesarAveria(String cpId, String mensaje) {
@@ -140,6 +164,9 @@ public class HiloServidor extends Thread {
         
         String confirmacion2= "Averia|" + cpId;
         productor.send(new ProducerRecord<>("sistema-eventos", cpId, confirmacion2));
+        
+        registrarEvento(cpId, "AVERIA", "Avería detectada: " + mensaje);
+        actualizarEstadoCP(cpId, "AVERIADO", false);
 
 	}
 
@@ -152,6 +179,8 @@ public class HiloServidor extends Thread {
         
         String confirmacion = "Consumo_OK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+        registrarEvento(cpId, "CONSUMO_UPDATE",
+                String.format("Actualización de consumo: %s kWh / %s €", consumo, importe));
 	}
 
 	private void procesarAutorizacion(String cpId, String mensaje) {
@@ -160,10 +189,12 @@ public class HiloServidor extends Thread {
 		if(mensaje.contains("Aceptada")) {
 			String confirmacion = "Autorización_OK_ACK|" + cpId;
 	        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+	        registrarEvento(cpId, "AUTORIZACION_OK", mensaje);
 		}
 		else {
 			String confirmacion = "Autorización_DEN_ACK|" + cpId;
 	        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+	        registrarEvento(cpId, "AUTORIZACION_DENEGADA", mensaje);
 		}
 	}
 
@@ -176,6 +207,10 @@ public class HiloServidor extends Thread {
         
         String confirmacion = "Actualizacion_OK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+        registrarEvento(cpId, "ACTUALIZACION_ESTADO", "Nuevo estado: " + estado);
+        
+        boolean funcionaBool = "Ok".equalsIgnoreCase(funciona);
+        actualizarEstadoCP(cpId, estado, funcionaBool);
 	}
 
 	private void procesarRegistro(String cpId, String mensaje) {
@@ -187,6 +222,18 @@ public class HiloServidor extends Thread {
         
         String confirmacion = "Registro_OK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+        registrarEvento(cpId, "REGISTRO_CP", "CP registrado en " + ubicacion);
+        
+        try (Connection conn = DBManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE charging_point SET registrado_central=TRUE, estado='ACTIVADO', ubicacion=?, precio_kwh=? WHERE id=?")) {
+               ps.setString(1, ubicacion);
+               ps.setDouble(2, Double.parseDouble(precio));
+               ps.setString(3, cpId);
+               ps.executeUpdate();
+        } catch (SQLException e) {
+        	System.err.println("[DB] Error actualizando CP: " + e.getMessage());
+        }
 		
 	}
 	
@@ -199,11 +246,39 @@ public class HiloServidor extends Thread {
 	    System.out.printf("Ticket enviado a %s - %s: %s kW (%s €)%n", conductorId, cpId, consumo, importe);
 	    String confirmacion = "Ticket_ACK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+        registrarEvento(cpId, "CONFIRMACION",
+                String.format("Ticket enviado a %s - Consumo %s kWh / %s €", conductorId, consumo, importe));
 	}
 
 	public void detener() {
 		ejecucion=false;
 		this.interrupt();
-		 System.out.println("Hilo servidor detenido");
+		System.out.println("Hilo servidor detenido");
 	}
+	
+	private void registrarEvento(String cpId, String tipo, String descripcion) {
+        try (Connection conn = DBManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "INSERT INTO event_log (cp_id, tipo_evento, descripcion) VALUES (?, ?, ?)")) {
+            ps.setString(1, cpId);
+            ps.setString(2, tipo);
+            ps.setString(3, descripcion);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("[DB] Error registrando evento: " + e.getMessage());
+        }
+    }
+	
+	private void actualizarEstadoCP(String cpId, String estado, boolean funciona) {
+        try (Connection conn = DBManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE charging_point SET estado=?, funciona=?, ultima_actualizacion=NOW() WHERE id=?")) {
+            ps.setString(1, estado);
+            ps.setBoolean(2, funciona);
+            ps.setString(3, cpId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("[DB] Error actualizando estado CP: " + e.getMessage());
+        }
+    }
 }

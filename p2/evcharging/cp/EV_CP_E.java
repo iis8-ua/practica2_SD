@@ -9,6 +9,8 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import java.time.Duration;
+import java.sql.*;
+import p2.db.DBManager;
 
 public class EV_CP_E {
 	private ChargingPoint cp;
@@ -298,15 +300,25 @@ public class EV_CP_E {
 	}
 	
 	private void simularAveria() {
-		System.out.println("Fallo en el CP " + cp.getId());
-		cp.setFunciona(false);
-		System.out.println("CP en estado de fallo, se ha notificado la averia a la Central");
+		if(cp.getFunciona()) {
+			System.out.println("Fallo en el CP " + cp.getId());
+			cp.setFunciona(false);
+			System.out.println("CP en estado de fallo, se ha notificado la averia a la Central");
+		}
+		else {
+			System.out.println("El CP ya esta averiado: " +cp.getEstado());
+		}
 	}
 	
 	private void repararAveria() {
-		System.out.println("Reparando averia en CP " + cp.getId());
-		cp.setFunciona(true);
-		System.out.println("Averia reparada, se ha notificado la recuperación a la Central");
+		if(cp.getEstado()==CPState.AVERIADO || !cp.getFunciona()) {
+			System.out.println("Reparando averia en CP " + cp.getId());
+			cp.setFunciona(true);
+			System.out.println("Averia reparada, se ha notificado la recuperación a la Central");
+		}
+		else {
+			System.out.println("No hay averia en el CP: " +cp.getEstado());
+		}
 	}
 	
 	private void mostrarEstadoCompleto() {
@@ -325,7 +337,10 @@ public class EV_CP_E {
 				monitor.detener();
 			}
 			
+			Thread.sleep(1000);
+			
 			if(cp !=null && cp.getConector() != null) {
+				resetearCPenBD();
 				cp.getConector().cerrarConexiones();
 			}
 			
@@ -336,15 +351,29 @@ public class EV_CP_E {
 		}
 	}
 	
-	 public ChargingPoint getChargingPoint() {
-	        return cp;
+	private void resetearCPenBD() {
+	    if(cp != null) {
+	        try (Connection conn = DBManager.getConnection();
+	             PreparedStatement ps = conn.prepareStatement(
+	                     "UPDATE charging_point SET estado='DESCONECTADO', funciona=TRUE, registrado_central=FALSE, conductor_actual=NULL, consumo_actual=0.0, importe_actual=0.0 WHERE id=?")) {
+	            ps.setString(1, cp.getId());
+	            ps.executeUpdate();
+	        } 
+	        catch (SQLException e) {
+	            System.err.println("[DB] Error resetando CP en BD: " + e.getMessage());
+	        }
 	    }
+	}
 
-	    public MonitorServer getMonitorService() {
-	        return monitor;
-	    }
+	public ChargingPoint getChargingPoint() {
+        return cp;
+    }
 
-	    public boolean getFuncionamiento() {
-	        return funcionamiento;
-	    }
+    public MonitorServer getMonitorService() {
+        return monitor;
+    }
+
+    public boolean getFuncionamiento() {
+        return funcionamiento;
+    }
 }

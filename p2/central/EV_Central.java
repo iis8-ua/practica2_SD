@@ -7,6 +7,10 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import java.util.Properties;
 import java.util.Scanner;
+import p2.db.DBManager;
+import java.sql.*;
+
+import javax.swing.SwingUtilities;
 
 //El StringSerializer y StringDeserializer lo que hacen es la conversion de string a bytes y viceversa
 //ya que kafka trabaja con bytes
@@ -33,7 +37,9 @@ public class EV_Central {
             //System.out.println("Ejemplo: java p2.central.EV_Central localhost:9092");
             System.exit(1);
         }
-
+        
+        DBManager.connect();
+        
         String dirKafka = args[0];
         System.out.println("Central iniciando...");
         System.out.println("Conectando a Kafka en: " + dirKafka);
@@ -60,6 +66,12 @@ public class EV_Central {
             servidor.iniciar();
             System.out.println("EV_Central iniciado correctamente");
             System.out.println("Escuchando mensajes de los CP...");
+            
+            SwingUtilities.invokeLater(() -> {
+                CentralDashboard dashboard = new CentralDashboard();
+                dashboard.setVisible(true);
+            });
+           
             
             scanner=new Scanner(System.in);
             Thread hilo=new Thread(() -> iniciarComandos());
