@@ -201,5 +201,4 @@ public class CentralConnector {
 			System.err.println("Error cerrando conexiones: " +e.getMessage());
 		}
 	}
-
 }

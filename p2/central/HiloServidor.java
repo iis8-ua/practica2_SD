@@ -75,6 +75,9 @@ public class HiloServidor extends Thread {
 	            case "driver-solicitud":
 	            	procesarSolicitudDriver(cpId, mensaje);
 	            	break;
+	            case "monitor-averias":
+	            	procesarAveriaMonitor(cpId, mensaje);
+	                break;
 	            default:
 	                System.out.println("Tema no reconocido: " + tema);
 			}
@@ -82,6 +85,18 @@ public class HiloServidor extends Thread {
 		catch(Exception e) {
 			System.err.println("Error procesando el mensaje: " + e.getMessage());
 		}
+	}
+
+	private void procesarAveriaMonitor(String cpId, String mensaje) {
+		String confirmacion = "Averia_Monitor_ACK|" + cpId;
+	    productor.send(new ProducerRecord<>("central-to-monitor", cpId, confirmacion));
+	    
+	    String evento = "Averia_Monitor|" + cpId;
+	    productor.send(new ProducerRecord<>("sistema-eventos", cpId, evento));
+	    
+	    registrarEvento(cpId, "AVERIA_MONITOR", "Avería reportada por Monitor: " + mensaje);
+	    actualizarEstadoCP(cpId, "AVERIADO", false);
+	    
 	}
 
 	private void procesarSolicitudDriver(String driverId, String mensaje) {
@@ -152,12 +167,7 @@ public class HiloServidor extends Thread {
 	}
 
 	private void procesarAveria(String cpId, String mensaje) {
-		if(mensaje.startsWith("Averia_Reporte")) {
-			System.out.println("Reporte del monitor, averia en CP: " + cpId);
-		}
-		else {
-			System.out.println("Averia en CP: " + cpId);
-		}
+		System.out.println("Averia en CP: " + cpId);
 		
 		String confirmacion = "Averia_ACK|" + cpId;
         productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));

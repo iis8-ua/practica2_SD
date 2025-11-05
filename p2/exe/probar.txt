@@ -16,6 +16,7 @@ bin/kafka-topics.sh --create --topic sistema-eventos --bootstrap-server localhos
 bin/kafka-topics.sh --create --topic monitor-registro --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic ticket --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic comandos-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic monitor-averias --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 
 
 #Ver los topics

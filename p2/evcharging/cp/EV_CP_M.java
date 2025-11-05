@@ -14,7 +14,8 @@ public class EV_CP_M {
     private String dirKafka;
     private boolean ejecucion;
     private boolean inicio;
-    private CentralConnector conector;
+    private boolean engine=false;
+
     private Thread hilo;
     
     
@@ -76,7 +77,7 @@ public class EV_CP_M {
     public void iniciar(String hostEngine, int puertoEngine, String cpId, String dirKafka, int puertoMonitor) {
     	try {
     		this.hostEngine = hostEngine;
-            this.puertoEngine = puertoMonitor;
+            this.puertoEngine = puertoEngine;
             this.cpId = cpId;
             this.dirKafka = dirKafka;
             this.ejecucion = true;
@@ -88,6 +89,9 @@ public class EV_CP_M {
             
             System.out.println("Monitor iniciado para el CP: " + cpId);
             System.out.println("Conectado a Central en: " + dirKafka);
+            
+            conectarAEngine();
+            
             verificarEstadoInicial();
             verificarEstadoAuto();
             mantenerEjecucion();
@@ -102,6 +106,51 @@ public class EV_CP_M {
     }
     
 
+	private void conectarAEngine() {
+		try {
+			Socket s=new Socket(hostEngine, puertoEngine+1000);
+			engine=true;
+			verificarMonitorActivoEngine(s);
+		}
+		catch (IOException e) {
+	        engine=false;
+	    }
+	}
+
+	private void verificarMonitorActivoEngine(Socket s) {
+		Thread monitorActivo=new Thread(() -> {
+			try {
+				s.setSoTimeout(3000);
+				
+				while(ejecucion && !s.isClosed() && engine) {
+					try {
+						escribirDatos(s, "MONITOR_ACTIVO");
+						String respuesta=leerDatos(s);
+						
+						if(respuesta==null || !respuesta.contains("MONITOR_ACTIVO_ACK")) {
+							engine=false;
+							break;
+						}
+						Thread.sleep(2000);
+						
+					}
+					catch(InterruptedException e) {
+						engine=false;
+	                    break;
+					}
+				}
+				if(!s.isClosed()) {
+					s.close();
+				}
+				engine=false;
+			}
+			catch(Exception e) {
+				engine=false;
+			}
+		});
+		monitorActivo.start();
+	}
+
 	private void verificarEstadoInicial() {
 		boolean estadoInicial=verificarEstadoEngine();
 		if(!estadoInicial) {
@@ -111,6 +160,10 @@ public class EV_CP_M {
 		}
 		else {
 			System.out.println("Conectado al Engine en: " + hostEngine + ":" + puertoEngine);
+			if(!engine) {
+				conectarAEngine();
+				engine=true;
+			}
 			inicio=true;
 		}
 	}
@@ -125,7 +178,7 @@ public class EV_CP_M {
 		    KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
 		    
 		    String mensaje = "Averia_Inicial|" + cpId + "|Engine_no_disponible";
-	        ProducerRecord<String, String> record = new ProducerRecord<>("fallo-cp", cpId, mensaje);
+	        ProducerRecord<String, String> record = new ProducerRecord<>("monitor-averias", cpId, mensaje);
 	        productor.send(record);
 	        System.out.println("Avería inicial reportada a central, engine no disponible al iniciar");
 	        productor.close();
@@ -150,9 +203,6 @@ public class EV_CP_M {
 	private void detener() {
 		ejecucion=false;
 		try {
-			if(conector !=null) {
-				conector.cerrarConexiones();
-			}
 			
 			if(hilo !=null) {
 				hilo.interrupt();
@@ -227,7 +277,7 @@ public class EV_CP_M {
 	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
 	        
 	        String mensaje="Averia_Reporte|" +cpId;
-	        ProducerRecord<String, String> record = new ProducerRecord<>("fallo-cp", cpId, mensaje);
+	        ProducerRecord<String, String> record = new ProducerRecord<>("monitor-averias", cpId, mensaje);
 	        productor.send(record);
 	        System.out.println("Avería reportada a Central");
 	        productor.close();
@@ -247,7 +297,7 @@ public class EV_CP_M {
 	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
 	        
 	        String mensaje="Recuperacion_Reporte|" +cpId;
-	        ProducerRecord<String, String> record = new ProducerRecord<>("recuperacion-cp", cpId, mensaje);
+	        ProducerRecord<String, String> record = new ProducerRecord<>("monitor-averias", cpId, mensaje);
 	        productor.send(record);
 	        System.out.println("Recuperacion reportada a Central");
 	        productor.close();
@@ -277,6 +327,10 @@ public class EV_CP_M {
 							ultimo=estado;
 							if(estado) {
 								System.out.println("Engine conectado - " + java.time.LocalTime.now());
+								if(!engine) {
+									conectarAEngine();
+									engine=true;
+								}
 							}
 							else {
 								System.out.println("Engine desconectado - " + java.time.LocalTime.now());
@@ -286,6 +340,7 @@ public class EV_CP_M {
 						else if (!estado && ultimo && conectado) {
 							System.out.println("Engine Averiado - " + java.time.LocalTime.now());
 	                        reportarAveria();
+	                        engine=false;
 	                    } 
 						
 						else if(estado && !conectado) {
@@ -293,11 +348,26 @@ public class EV_CP_M {
 				            reportarRecuperacion();
 				            conectado=true;
 				            ultimo=true;
+				            
+				            if(!engine) {
+				            	conectarAEngine();
+				            	engine=true;
+				            }
 				        } 
 						else if (estado && !ultimo && conectado) {
 	                        System.out.println("Engine Recuperado - " + java.time.LocalTime.now());
 	                        reportarRecuperacion();
-	                    } 
+	                        
+	                        if(!engine) {
+				            	conectarAEngine();
+				            	engine=true;
+				            }
+	                    }
+						
+						else if(estado && ultimo && conectado && !engine) {
+							conectarAEngine();
+			            	engine=true;
+						}
 						
 						else if (estado && ultimo && conectado) {
 	                        System.out.println("Engine OK - " + java.time.LocalTime.now());
@@ -319,6 +389,7 @@ public class EV_CP_M {
 						if(ultimo) {
 							reportarAveria();
 							ultimo=false;
+							engine=false;
 						}
 						try {
 	                        Thread.sleep(1000);

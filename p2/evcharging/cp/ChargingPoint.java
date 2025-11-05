@@ -187,6 +187,33 @@ public class ChargingPoint {
 	  }
   }
   
+  
+  public void setFunciona2(boolean funciona) {
+	  boolean anterior=this.funciona;
+	  this.funciona=funciona;
+	  
+	  if(!funciona && anterior) {
+		  if (this.estado != CPState.PARADO) {
+			  this.estado = CPState.AVERIADO;
+	      }
+		  registrarEvento("AVERIA", "Avería detectada en CP");
+		  actualizarCPenBD(this.estado.name(), false);
+		  System.out.println("Avería pasada a Central");
+		  
+		  if (estado == CPState.SUMINISTRANDO) {
+			  finalizarSuministro();
+		  }
+	  }
+	  else if (funciona && !anterior) {
+		  if (this.estado == CPState.AVERIADO) {
+			  this.estado = CPState.ACTIVADO;
+	      }
+		  registrarEvento("RECUPERACION", "Recuperación tras mantenimiento");
+		  actualizarCPenBD(this.estado.name(), true);
+		  System.out.println("Recuperación pasada a Central");
+	  }
+  }
+  
   public void procesarComandoCentral(String comando) {
 	  String[] partes = comando.split("\\|");
 	  String tipo = partes[0];

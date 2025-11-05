@@ -6,9 +6,19 @@ import java.util.Arrays;
 import java.util.Properties;
 import java.util.Scanner;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import java.time.Duration;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.sql.*;
 import p2.db.DBManager;
 
@@ -16,11 +26,14 @@ public class EV_CP_E {
 	private ChargingPoint cp;
 	private MonitorServer monitor;
 	private boolean funcionamiento;
+	private boolean registrado=false;
 	private Scanner scanner;
 	private String host;
 	private int puerto;
 	private String dirKafka;
 	private Thread hilo; 
+	private Thread hiloEspera; 
+	private KafkaConsumer<String, String> consumidor;
 	
 	public static void main(String[] args) {
 		//para que no aparezcan los mensajes de kafka en la central 
@@ -32,6 +45,7 @@ public class EV_CP_E {
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.network", "ERROR");
     	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.consumer", "ERROR");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.consumer.internals", "ERROR");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
 		
 		if (args.length < 6) {
@@ -54,6 +68,34 @@ public class EV_CP_E {
 		engine.iniciar(cpId, ubicacion, precioKwh, host, puerto, dirKafka, puertoMonitor);
 	}
 	
+    public void escribirDatos(Socket sock, String datos) {
+		try {
+			OutputStream aux= sock.getOutputStream();
+			DataOutputStream flujo = new DataOutputStream(aux);
+			flujo.writeUTF(datos);
+		}
+		catch (Exception e) {
+			System.out.println("Error al escribir datos " + e.toString());
+		}
+	}
+	
+	public String leerDatos(Socket sock) {
+		String datos = "";
+		try {
+			InputStream aux= sock.getInputStream();
+			DataInputStream flujo = new DataInputStream(aux);
+			datos=flujo.readUTF();
+		}
+		catch(EOFException eof) {
+			return null;
+		}
+		
+		catch (IOException e) {
+			System.out.println("Error al leer datos " + e.toString());
+		}
+		return datos;
+	}
+	
 	  public void iniciar(String cpId, String ubicacion, double precioKwh, String host, int puerto, String dirKafka, int puertoMonitor) {
 		  try {
 			  this.host=host;
@@ -62,16 +104,13 @@ public class EV_CP_E {
 			  this.scanner= new Scanner(System.in);
 			  
 			  this.cp=new ChargingPoint(cpId, ubicacion, precioKwh);
-			  boolean registro=cp.registroEnCentral(dirKafka);
-			  
-			  if(!registro) {
-				  System.err.println("No se ha registrado el CP en la central");
-				  return;
-			  }
 			  
 			  this.monitor= new MonitorServer(cp, puertoMonitor);
+			  
 			  Thread hiloMonitor = new Thread(() -> monitor.iniciar());
 			  hiloMonitor.start();
+			  
+			  iniciarEsperaMonitor(puertoMonitor);
 			  
 			  iniciarConsumidorCentral();
 
@@ -85,6 +124,100 @@ public class EV_CP_E {
 			  detener();
 		  }
 	  }
+		
+		public void registrarEnCentral() {
+			if(!registrado) {
+				boolean registro=cp.registroEnCentral(dirKafka);
+				if(registro) {
+					registrado=true;
+				}
+			}
+		}
+		
+		private void iniciarEsperaMonitor(int puertoMonitor) {
+			hiloEspera= new Thread(() -> {
+				try(ServerSocket espera = new ServerSocket(puertoMonitor + 1000)){
+					while(funcionamiento && !Thread.currentThread().isInterrupted()) {
+						try {
+							Socket s=espera.accept();
+							System.out.println("Monitor iniciado");
+							registrarEnCentral();
+							verificarMonitorActivo(s);
+						}
+						catch(IOException e) {
+							if(funcionamiento && !Thread.currentThread().isInterrupted()) {
+								 System.err.println("Error aceptando conexión del monitor: " + e.getMessage());
+							}
+						}
+					}
+
+				}
+				catch(IOException e) {
+					if(funcionamiento && !Thread.currentThread().isInterrupted()) {
+						System.err.println("Error esperando al monitor: " + e.getMessage());
+					}
+
+				}
+				
+			});
+			hiloEspera.start();
+		}
+
+	private void verificarMonitorActivo(Socket s) {
+		Thread monitorActivo=new Thread(() -> {
+			try {
+				s.setSoTimeout(5000);
+				
+				while(funcionamiento && !s.isClosed()) {
+					try {
+						String mensaje=leerDatos(s);
+						if(mensaje==null) {
+							System.out.println("Monitor desconectado");
+							marcarCPDesconectado();
+		                    break;
+						}
+						if("MONITOR_ACTIVO".equals(mensaje)) {
+							escribirDatos(s,"MONITOR_ACTIVO_ACK");
+						}
+						Thread.sleep(2000);
+					}
+					catch(InterruptedException e) {
+						marcarCPDesconectado();
+	                    break;
+					}
+				}
+				try {
+		            s.close();
+		        } 
+				catch (IOException e) {
+		            
+		        }
+			}
+			catch(Exception e) {
+				marcarCPDesconectado();
+			}
+		});
+		monitorActivo.start();
+	}
+	
+	private void marcarCPDesconectado() {
+	    if (cp != null) {
+	        try (Connection conn = DBManager.getConnection();
+	             PreparedStatement ps = conn.prepareStatement(
+	                     "UPDATE charging_point SET estado='DESCONECTADO', registrado_central=FALSE WHERE id=?")) {
+	            ps.setString(1, cp.getId());
+	            ps.executeUpdate();
+	            
+		        
+		        
+		        registrado=false;
+	        } 
+
+	        catch (SQLException e) {
+	            System.err.println("[DB] Error marcando CP como desconectado: " + e.getMessage());
+	        }
+	    }
+	}
 
 	private void iniciarConsumidorCentral() {
 		hilo=new Thread (() -> {
@@ -94,7 +227,8 @@ public class EV_CP_E {
 			propiedades.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 			propiedades.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 			
-			try (KafkaConsumer<String, String> consumidor = new KafkaConsumer<>(propiedades)) {
+			try {
+				this.consumidor=new KafkaConsumer<>(propiedades);
 				consumidor.subscribe(Arrays.asList("comandos-cp"));
 				
 				while(funcionamiento) {
@@ -109,6 +243,16 @@ public class EV_CP_E {
 			}
 			catch(Exception e) {
 				System.err.println("Error en consumidor de Central: " + e.getMessage());
+			}
+			finally {
+				if(consumidor!=null) {
+					try {
+						consumidor.close();
+					}
+					catch(Exception e) {
+						
+					}
+				}
 			}
 		});
 		hilo.start(); 
@@ -216,6 +360,11 @@ public class EV_CP_E {
 	        System.out.println("6.  Reparar avería");
 	        System.out.println("7.  Estado completo");
 	        System.out.println("8.  Salir");
+	        
+	        if(!registrado) {
+	        	System.out.println("Monitor desconectado, solo disponible: 5, 7, 8");
+	        }
+	        
 	        System.out.print("Seleccione opción: ");
 	}
 	
@@ -231,6 +380,10 @@ public class EV_CP_E {
 	}
 	
 	private void procesarOpcion(int opcion) {
+		if(!registrado && opcion!=5 && opcion!=7 && opcion!=8) {
+			System.out.println("No disponible, no esta conectado el monitor");
+			return;
+		}
         switch (opcion) {
             case 1:
                 iniciarSuministroManual();
@@ -305,7 +458,8 @@ public class EV_CP_E {
 	private void simularAveria() {
 		if(cp.getFunciona()) {
 			System.out.println("Fallo en el CP " + cp.getId());
-			cp.setFunciona(false);
+			cp.setFunciona2(false);
+			reportarAveria();
 			System.out.println("CP en estado de fallo, se ha notificado la averia a la Central");
 		}
 		else {
@@ -313,10 +467,30 @@ public class EV_CP_E {
 		}
 	}
 	
+	private void reportarAveria() {
+		try {
+	        Properties propiedades = new Properties();
+	        propiedades.put("bootstrap.servers", dirKafka);
+	        propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+	        propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+	        propiedades.put("acks", "1");
+	        
+	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
+	        String mensaje = "Averia|" + cp.getId();
+	        productor.send(new ProducerRecord<>("fallo-cp", cp.getId(), mensaje));
+	        productor.close();
+	        
+	    } 
+		catch (Exception e) {
+	        System.err.println("Error reportando avería: " + e.getMessage());
+	    }
+	}
+
 	private void repararAveria() {
 		if(cp.getEstado()==CPState.AVERIADO || !cp.getFunciona()) {
 			System.out.println("Reparando averia en CP " + cp.getId());
-			cp.setFunciona(true);
+			cp.setFunciona2(true);
+			reportarRecuperacion();
 			System.out.println("Averia reparada, se ha notificado la recuperación a la Central");
 		}
 		else {
@@ -324,6 +498,23 @@ public class EV_CP_E {
 		}
 	}
 	
+	private void reportarRecuperacion() {
+		try {
+			Properties propiedades = new Properties();
+			propiedades.put("bootstrap.servers", dirKafka);
+			propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+			propiedades.put("acks", "1");
+			KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
+	        String mensaje = "Recuperacion|" + cp.getId();
+	        productor.send(new ProducerRecord<>("recuperacion-cp", cp.getId(), mensaje));
+	        productor.close();
+		}
+		catch(Exception e) {
+			 System.err.println("Error reportando la recuperación: " + e.getMessage());
+		}
+	}
+
 	private void mostrarEstadoCompleto() {
 		cp.imprimirInfoCP();
 	}
@@ -332,19 +523,27 @@ public class EV_CP_E {
 	private void detener() {
 		funcionamiento =false;
 		try {
+			if(consumidor!=null) {
+				consumidor.wakeup();
+			}
+			
+			if(hilo !=null && hilo.isAlive()) {
+				hilo.interrupt();
+				hilo.join(1000);
+			}
+			
+			if(hiloEspera !=null && hiloEspera.isAlive()) {
+				hiloEspera.interrupt();
+			}
+			
+			Thread.sleep(500);
+			
 			if(scanner != null) {
 				scanner.close();
 			}
 			
 			if(monitor != null) {
 				monitor.detener();
-			}
-			
-			Thread.sleep(1000);
-			
-			if(hilo !=null && hilo.isAlive()) {
-				hilo.interrupt();
-				hilo.join(2000);
 			}
 			
 			if(cp !=null && cp.getConector() != null) {
@@ -384,5 +583,9 @@ public class EV_CP_E {
 
     public boolean getFuncionamiento() {
         return funcionamiento;
+    }
+    
+    public boolean getRegistrado() {
+    	return registrado;
     }
 }

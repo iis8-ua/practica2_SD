@@ -24,7 +24,8 @@ public class ServidorConcurrente {
     			"recuperacion-cp",
     			"monitor-registro",
     			"ticket",
-    			"driver-solicitud"
+    			"driver-solicitud",
+    			"monitor-averias"
     	));
     }
     

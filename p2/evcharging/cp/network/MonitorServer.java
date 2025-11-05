@@ -1,6 +1,8 @@
 package p2.evcharging.cp.network;
 
 import p2.evcharging.cp.ChargingPoint;
+import p2.evcharging.cp.EV_CP_E;
+
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -11,7 +13,6 @@ public class MonitorServer {
     private ServerSocket serverSocket;
     private boolean ejecucion;
 	
-
 	public MonitorServer(ChargingPoint cp, int puerto) {
 		this.cp=cp;
 		this.puerto=puerto;
@@ -22,7 +23,6 @@ public class MonitorServer {
 		try {
 			serverSocket= new ServerSocket(puerto);
 			ejecucion=true;
-			//System.out.println("MonitorServer iniciado en puerto " + puerto);
 			
 			while(ejecucion) {
 				try {
