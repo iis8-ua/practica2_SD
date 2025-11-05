@@ -22,7 +22,7 @@ bin/kafka-topics.sh --create --topic comandos-cp --bootstrap-server localhost:90
 bin/kafka-topics.sh --list --bootstrap-server localhost:9092
 
 
-#COMPILACION
+#COMPILACION MANUAL
 cd ~/eclipse-workspace/SD-base/src
 javac -cp "p2/libs/*" p2/db/DBManager.java p2/evcharging/cp/*.java p2/evcharging/cp/network/*.java p2/evcharging/cp/service/*.java
 javac -cp "p2/libs/*" p2/db/DBManager.java p2/central/*.java
