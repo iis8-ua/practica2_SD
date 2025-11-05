@@ -20,20 +20,22 @@ public class EV_CP_E {
 	private String host;
 	private int puerto;
 	private String dirKafka;
+	private Thread hilo; 
 	
 	public static void main(String[] args) {
 		//para que no aparezcan los mensajes de kafka en la central 
     	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "WARN");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "WARN");
-    	System.setProperty("org.slf4j.simpleLogger.log.kafka", "WARN");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "ERROR");
+    	System.setProperty("org.slf4j.simpleLogger.log.kafka", "ERROR");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.common", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.network", "ERROR");
     	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "WARN");
+    	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.consumer", "ERROR");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
 		
-		if (args.length < 5) {
-            System.out.println("Uso: java EV_CP_E <cp_id> <ubicacion> <precio_kwh> <host:port> <dirKafka>");
+		if (args.length < 6) {
+            System.out.println("Uso: java EV_CP_E <cp_id> <ubicacion> <precio_kwh> <host:port> <dirKafka> <puerto_monitor>");
             //System.out.println("Ej: java EV_CP_E CP001 \"Calle Principal 123\" 0.15 localhost:9090 localhost:9092");
             return;
         }
@@ -43,15 +45,16 @@ public class EV_CP_E {
 		double precioKwh = Double.parseDouble(args[2]);
 		String[] centralArgs = args[3].split(":");
 		String dirKafka=args[4];
+		int puertoMonitor=Integer.parseInt(args[5]);	
 		
 		String host=centralArgs[0];
 		int puerto= Integer.parseInt(centralArgs[1]);
 		
 		EV_CP_E engine = new EV_CP_E();
-		engine.iniciar(cpId, ubicacion, precioKwh, host, puerto, dirKafka);
+		engine.iniciar(cpId, ubicacion, precioKwh, host, puerto, dirKafka, puertoMonitor);
 	}
 	
-	  public void iniciar(String cpId, String ubicacion, double precioKwh, String host, int puerto, String dirKafka) {
+	  public void iniciar(String cpId, String ubicacion, double precioKwh, String host, int puerto, String dirKafka, int puertoMonitor) {
 		  try {
 			  this.host=host;
 			  this.puerto=puerto;
@@ -66,7 +69,7 @@ public class EV_CP_E {
 				  return;
 			  }
 			  
-			  this.monitor= new MonitorServer(cp, 8080);
+			  this.monitor= new MonitorServer(cp, puertoMonitor);
 			  Thread hiloMonitor = new Thread(() -> monitor.iniciar());
 			  hiloMonitor.start();
 			  
@@ -84,7 +87,7 @@ public class EV_CP_E {
 	  }
 
 	private void iniciarConsumidorCentral() {
-		Thread hilo=new Thread (() -> {
+		hilo=new Thread (() -> {
 			Properties propiedades = new Properties();
 			propiedades.put("bootstrap.servers", dirKafka);
 			propiedades.put("group.id", "engine-" + cp.getId());
@@ -339,10 +342,16 @@ public class EV_CP_E {
 			
 			Thread.sleep(1000);
 			
+			if(hilo !=null && hilo.isAlive()) {
+				hilo.interrupt();
+				hilo.join(2000);
+			}
+			
 			if(cp !=null && cp.getConector() != null) {
-				resetearCPenBD();
 				cp.getConector().cerrarConexiones();
 			}
+						
+			resetearCPenBD();
 			
 			System.out.println("Engine detenido");
 		}

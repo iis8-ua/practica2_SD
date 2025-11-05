@@ -29,8 +29,8 @@ public class EV_CP_M {
     	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "WARN");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
     	
-        if (args.length < 4) {
-        	System.out.println("Uso: java EV_CP_M <host_engine> <puerto_engine> <cp_id> <dirKafka>");
+        if (args.length < 5) {
+        	System.out.println("Uso: java EV_CP_M <host_engine> <puerto_engine> <cp_id> <dirKafka> <puerto_monitor>");
             //System.out.println("Ej: java EV_CP_M localhost 8080 CP001 localhost:9092");
             return;
         }
@@ -39,9 +39,10 @@ public class EV_CP_M {
         int puertoEngine = Integer.parseInt(args[1]);
         String cpId = args[2];
         String dirKafka = args[3];
+        int puertoMonitor=Integer.parseInt(args[4]);
 
         EV_CP_M monitor = new EV_CP_M();
-        monitor.iniciar(hostEngine, puertoEngine, cpId, dirKafka);
+        monitor.iniciar(hostEngine, puertoEngine, cpId, dirKafka, puertoMonitor);
     }
     
     public void escribirDatos(Socket sock, String datos) {
@@ -72,10 +73,10 @@ public class EV_CP_M {
 		return datos;
 	}
     
-    public void iniciar(String hostEngine, int puertoEngine, String cpId, String dirKafka) {
+    public void iniciar(String hostEngine, int puertoEngine, String cpId, String dirKafka, int puertoMonitor) {
     	try {
     		this.hostEngine = hostEngine;
-            this.puertoEngine = puertoEngine;
+            this.puertoEngine = puertoMonitor;
             this.cpId = cpId;
             this.dirKafka = dirKafka;
             this.ejecucion = true;
@@ -293,12 +294,6 @@ public class EV_CP_M {
 				            conectado=true;
 				            ultimo=true;
 				        } 
-						else if(!estado && conectado) {
-							System.out.println("Engine desconectado a mitad de monitorización - " + java.time.LocalTime.now());
-	                        reportarAveria();
-	                        conectado = false;
-	                        ultimo = false;
-						}
 						else if (estado && !ultimo && conectado) {
 	                        System.out.println("Engine Recuperado - " + java.time.LocalTime.now());
 	                        reportarRecuperacion();
@@ -310,11 +305,6 @@ public class EV_CP_M {
 						
 						else if (!estado && !ultimo && conectado) {
 							System.out.println("Engine KO - " + java.time.LocalTime.now());
-	                    } 
-						else if (!estado && !conectado) {
-							if (System.currentTimeMillis() % 10000 < 1000) { // Mostrar cada 10 segundos
-	                            System.out.println("Engine sigue desconectado - " + java.time.LocalTime.now());
-	                        }
 	                    } 
 						ultimo=estado;
 						Thread.sleep(1000);
