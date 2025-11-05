@@ -6,8 +6,6 @@ import java.net.Socket;
 import java.util.Properties;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import java.sql.*;
-import p2.db.DBManager;
 
 public class EV_CP_M {
 	private String cpId;
@@ -82,8 +80,6 @@ public class EV_CP_M {
             this.dirKafka = dirKafka;
             this.ejecucion = true;
             
-            DBManager.connect();
-            
             if (!conectarCentral()) {
             	System.err.println("No se ha podido establecer conecion con la central. Saliendo...");
                 return;
@@ -91,8 +87,6 @@ public class EV_CP_M {
             
             System.out.println("Monitor iniciado para el CP: " + cpId);
             System.out.println("Conectado a Central en: " + dirKafka);
-            actualizarMonitorBD(true);
-            registrarEvento("REGISTRO_MONITOR", "Monitor activo y conectado");
             verificarEstadoInicial();
             verificarEstadoAuto();
             mantenerEjecucion();
@@ -163,8 +157,6 @@ public class EV_CP_M {
 				hilo.interrupt();
 				hilo.join(2000);
 			}
-			actualizarMonitorBD(false);
-            registrarEvento("CONFIRMACION", "Monitor detenido correctamente");
 			System.out.println("Monitor detenido");
 		}
 		catch(Exception e) {
@@ -216,14 +208,11 @@ public class EV_CP_M {
 		    ProducerRecord<String, String> record = new ProducerRecord<>("monitor-registro", cpId, registroStr);
 		    productor.send(record);
 		    System.out.println("Monitor registrado en la Central para CP: " + cpId);
-		    registrarEvento("REGISTRO_MONITOR", "Monitor registrado en la Central");
-            actualizarMonitorBD(true);
 	        productor.close();
 	        return true;
 		}
 		catch(Exception e) {
 			 System.err.println("Error en la conexion con la Central: " + e.getMessage());
-			 registrarEvento("AUTORIZACION_DENEGADA", "Fallo al registrar monitor");
 			 return false;
 		}
 	}
@@ -241,8 +230,6 @@ public class EV_CP_M {
 	        productor.send(record);
 	        System.out.println("Avería reportada a Central");
 	        productor.close();
-	        registrarEvento("AVERIA", "Avería reportada por monitor");
-            actualizarMonitorBD(false);
 		}
 		catch(Exception e) {
 	        System.err.println("Error reportando la avería: " + e.getMessage());
@@ -263,8 +250,6 @@ public class EV_CP_M {
 	        productor.send(record);
 	        System.out.println("Recuperacion reportada a Central");
 	        productor.close();
-	        registrarEvento("RECUPERACION", "Recuperación reportada por monitor");
-            actualizarMonitorBD(true);
 		}
 		catch(Exception e) {
 	        System.err.println("Error reportando la recuperacion: " + e.getMessage());
@@ -297,10 +282,14 @@ public class EV_CP_M {
 							}
 						}
 						
+						else if (!estado && ultimo && conectado) {
+							System.out.println("Engine Averiado - " + java.time.LocalTime.now());
+	                        reportarAveria();
+	                    } 
+						
 						else if(estado && !conectado) {
 				            System.out.println("Engine conectado en: " + hostEngine + ":" + puertoEngine + " - " + java.time.LocalTime.now());
 				            reportarRecuperacion();
-				            actualizarMonitorBD(true);
 				            conectado=true;
 				            ultimo=true;
 				        } 
@@ -310,18 +299,15 @@ public class EV_CP_M {
 	                        conectado = false;
 	                        ultimo = false;
 						}
-						else if (estado && ultimo && conectado) {
-	                        System.out.println("Engine OK - " + java.time.LocalTime.now());
-	                        actualizarMonitorBD(true);
-	                    } 
 						else if (estado && !ultimo && conectado) {
 	                        System.out.println("Engine Recuperado - " + java.time.LocalTime.now());
 	                        reportarRecuperacion();
 	                    } 
-						else if (!estado && ultimo && conectado) {
-							System.out.println("Engine Averiado - " + java.time.LocalTime.now());
-	                        reportarAveria();
+						
+						else if (estado && ultimo && conectado) {
+	                        System.out.println("Engine OK - " + java.time.LocalTime.now());
 	                    } 
+						
 						else if (!estado && !ultimo && conectado) {
 							System.out.println("Engine KO - " + java.time.LocalTime.now());
 	                    } 
@@ -357,32 +343,5 @@ public class EV_CP_M {
 		
 		hilo.start();
 	}
-	
-	private void actualizarMonitorBD(boolean conectado) {
-        try (Connection conn = DBManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "UPDATE monitor SET conectado=?, fecha_registro=NOW() WHERE cp_id=?")) {
-            ps.setBoolean(1, conectado);
-            ps.setString(2, cpId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("[DB] Error actualizando monitor: " + e.getMessage());
-        }
-    }
-
-    private void registrarEvento(String tipo, String descripcion) {
-        try (Connection conn = DBManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO event_log (cp_id, tipo_evento, descripcion) VALUES (?, ?, ?)")) {
-            ps.setString(1, cpId);
-            ps.setString(2, tipo);
-            ps.setString(3, descripcion);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("[DB] Error registrando evento monitor: " + e.getMessage());
-        }
-    }
- 
-    
-    
+	    
 }
