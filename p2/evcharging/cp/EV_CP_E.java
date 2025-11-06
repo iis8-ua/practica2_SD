@@ -36,6 +36,7 @@ public class EV_CP_E {
 	private KafkaConsumer<String, String> consumidor;
 	
 	public static void main(String[] args) {
+		System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "OFF");
 		//para que no aparezcan los mensajes de kafka en la central 
     	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka", "ERROR");
@@ -43,7 +44,6 @@ public class EV_CP_E {
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.common", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.network", "ERROR");
-    	System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "WARN");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.consumer", "ERROR");
     	System.setProperty("org.slf4j.simpleLogger.log.org.apache.kafka.clients.consumer.internals", "ERROR");
     	java.util.logging.Logger.getLogger("org.apache.kafka").setLevel(java.util.logging.Level.SEVERE);
@@ -140,8 +140,6 @@ public class EV_CP_E {
 					while(funcionamiento && !Thread.currentThread().isInterrupted()) {
 						try {
 							Socket s=espera.accept();
-							System.out.println("Monitor iniciado");
-							registrarEnCentral();
 							verificarMonitorActivo(s);
 						}
 						catch(IOException e) {
@@ -167,22 +165,38 @@ public class EV_CP_E {
 		Thread monitorActivo=new Thread(() -> {
 			try {
 				s.setSoTimeout(5000);
+				boolean activo=false;
+				boolean primera=true;
 				
 				while(funcionamiento && !s.isClosed()) {
 					try {
 						String mensaje=leerDatos(s);
 						if(mensaje==null) {
-							System.out.println("Monitor desconectado");
-							marcarCPDesconectado();
+							if(activo) {
+								System.out.println("Monitor desconectado");
+								marcarCPDesconectado();
+							}
+							
 		                    break;
 						}
 						if("MONITOR_ACTIVO".equals(mensaje)) {
+							activo=true;
+							if(primera) {
+								System.out.println("Monitor iniciado");
+								registrarEnCentral();
+								primera=false;
+							}
 							escribirDatos(s,"MONITOR_ACTIVO_ACK");
 						}
+						else if("Comprobar_Funciona".equals(mensaje)) {
+					        escribirDatos(s, "Funciona_OK"); 
+					    }
 						Thread.sleep(2000);
 					}
 					catch(InterruptedException e) {
-						marcarCPDesconectado();
+						if(activo) {
+							marcarCPDesconectado();
+						}
 	                    break;
 					}
 				}

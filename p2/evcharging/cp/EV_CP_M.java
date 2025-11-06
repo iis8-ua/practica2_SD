@@ -217,7 +217,7 @@ public class EV_CP_M {
 
 	private boolean verificarEstadoEngine() {
 		try {
-			Socket s= new Socket(hostEngine, puertoEngine);
+			Socket s= new Socket(hostEngine, puertoEngine+1000);
 			s.setSoTimeout(3000); 
 			escribirDatos(s, "Comprobar_Funciona");
 			

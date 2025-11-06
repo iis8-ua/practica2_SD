@@ -1,9 +1,11 @@
 package p2.driver;
 
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Properties;
@@ -17,11 +19,14 @@ public class EV_Driver {
     private String dirKafka;
     private KafkaProducer<String, String> productor;
     private KafkaConsumer<String, String> consumidor;
-    private boolean ejecucion;
+    private volatile boolean ejecucion;
     private Scanner scanner;
     private String cp;
     private String sesion;
-    
+    private Thread hiloMensajes;
+	
+
+
     public static void main(String[] args) {
 		//para que no aparezcan los mensajes de kafka en la central 
     	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "WARN");
@@ -66,9 +71,9 @@ public class EV_Driver {
 			System.out.println("Driver " + driverId + " iniciado");
 			
 			//se usa el hilo para que no se bloquee el programa y haya ejecucion paralela y no se quede esperando los mensajes sin poder ejecutar el menu
-			Thread hilo= new Thread(this::procesarMensajes);
-			hilo.start();
-			
+			this.hiloMensajes = new Thread(this::procesarMensajes);
+			this.hiloMensajes.start();
+
 			if(archivo!=null) {
 				procesarArchivo(archivo);
 			}
@@ -114,18 +119,24 @@ public class EV_Driver {
 	
 	
 	 private void procesarMensajes() {
-		 while(ejecucion) {
-			 try {
-				 ConsumerRecords<String, String> records = consumidor.poll(Duration.ofMillis(1000));
-				 records.forEach(record -> {procesarMensaje(record.topic(), record.key(), record.value());});
-			 }
-			 catch(Exception e) {
-				 if(ejecucion) {
-					 System.err.println("Error procesando mensajes: " + e.getMessage());
-				 }
-			 }
-		 }
-	 }
+	    try {
+	        while (ejecucion) {
+	            ConsumerRecords<String, String> records = consumidor.poll(Duration.ofMillis(500));
+	            for (ConsumerRecord<String, String> r : records) {
+	                procesarMensaje(r.topic(), r.key(), r.value());
+	            }
+	        }
+	    } catch (WakeupException e) {
+	        // esta excepción es NORMAL cuando hacemos consumidor.wakeup()
+	    } finally {
+	        try {
+	            consumidor.close();   // <- único cierre válido
+	            System.out.println("[DRIVER] Consumidor cerrado correctamente.");
+	        } catch (Exception ignore) {}
+	    }
+	}
+
+
 	 
 	private void procesarMensaje(String tema, String key, String mensaje) {
 		if(tema.equals("driver-autorizacion-" + driverId)){
@@ -314,22 +325,22 @@ public class EV_Driver {
 	}
 
 	private void detener() {
-		ejecucion=false;
-		try {
-			if(productor !=null) {
-				productor.close();
-			}
-			if(consumidor !=null) {
-				consumidor.close();
-			}
-			if(scanner!=null) {
-				scanner.close();
-			}
-			System.out.println("Driver detenido");
-		}
-		catch(Exception e) {
-			System.err.println("Error deteniendo driver: " + e.getMessage());
-		}
+	    try {
+	        ejecucion = false; 
+	        consumidor.wakeup();
+	
+	        if (hiloMensajes != null && hiloMensajes.isAlive()) {
+	            hiloMensajes.join();
+	        }
+	
+	        if (productor != null) productor.close();
+	        if (scanner != null) scanner.close();
+	
+	        System.out.println("Driver detenido correctamente.");
+	    } catch (Exception e) {
+	        System.err.println("Error deteniendo driver: " + e.getMessage());
+	    }
 	}
+	
     
 }

@@ -25,7 +25,8 @@ public class ServidorConcurrente {
     			"monitor-registro",
     			"ticket",
     			"driver-solicitud",
-    			"monitor-averias"
+    			"monitor-averias",
+    			"monitor-estado"
     	));
     }
     

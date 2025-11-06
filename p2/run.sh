@@ -13,3 +13,8 @@ gnome-terminal -- bash -c 'java -cp "../p2/libs/*:.." p2.evcharging.cp.EV_CP_M l
 #gnome-terminal -- bash -c 'java -cp "../p2/libs/*:.." p2.evcharging.cp.EV_CP_M localhost 8083 CP004 localhost:9092 8083; exec bash'
 #gnome-terminal -- bash -c 'java -cp "../p2/libs/*:.." p2.evcharging.cp.EV_CP_M localhost 8084 CP005 localhost:9092 8084; exec bash'
 #gnome-terminal -- bash -c 'java -cp "../p2/libs/*:.." p2.evcharging.cp.EV_CP_M localhost 8085 CP006 localhost:9092 8085; exec bash'
+
+#Sin archivo
+gnome-terminal --title="DRIVER001 - Pedro Perez" -- bash -c 'java -cp "../p2/libs/*:.." p2.driver.EV_Driver localhost:9092 DRIVER001; exec bash'
+gnome-terminal --title="DRIVER002 - Jaime Torregrosa" -- bash -c 'java -cp "../p2/libs/*:.." p2.driver.EV_Driver localhost:9092 DRIVER002; exec bash'
+gnome-terminal --title="DRIVER003 - Gonzalo Martinez" -- bash -c 'java -cp "../p2/libs/*:.." p2.driver.EV_Driver localhost:9092 DRIVER003; exec bash'

@@ -17,6 +17,25 @@ bin/kafka-topics.sh --create --topic monitor-registro --bootstrap-server localho
 bin/kafka-topics.sh --create --topic ticket --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic comandos-cp --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --create --topic monitor-averias --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic monitor-estado --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+# Topics para DRIVER001
+bin/kafka-topics.sh --create --topic driver-autorizacion-DRIVER001 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-estado-DRIVER001 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-ticket-DRIVER001 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-error-DRIVER001 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+# Topics para DRIVER002
+bin/kafka-topics.sh --create --topic driver-autorizacion-DRIVER002 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-estado-DRIVER002 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-ticket-DRIVER002 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-error-DRIVER002 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+# Topics para DRIVER003
+bin/kafka-topics.sh--create --topic driver-autorizacion-DRIVER003 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-estado-DRIVER003 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh--create --topic driver-ticket-DRIVER003 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --create --topic driver-error-DRIVER003 --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 
 
 #Ver los topics

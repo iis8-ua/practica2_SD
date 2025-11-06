@@ -328,6 +328,10 @@ public class ChargingPoint {
   public void setConductorActual(String conductor) {
 		this.conductorActual=conductor;	
   }
+  
+  public void setRegistradoCentral(boolean registrado) {
+	    this.registradoCentral = registrado;
+  }
     
    public String getId() { 
 	   return id; 

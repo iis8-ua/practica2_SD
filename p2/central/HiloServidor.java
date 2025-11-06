@@ -70,8 +70,12 @@ public class HiloServidor extends Thread {
 	            case "monitor-registro":
 	            	procesarRegistroMonitor(cpId, mensaje);
 	            	break;
+	            case "monitor-estado":
+	            	procesarEstadoMonitor(cpId, mensaje);
+	            	break;
 	            case "ticket":
 	            	procesarTicket(cpId, mensaje);
+	            	break;
 	            case "driver-solicitud":
 	            	procesarSolicitudDriver(cpId, mensaje);
 	            	break;
@@ -87,6 +91,19 @@ public class HiloServidor extends Thread {
 		}
 	}
 
+	private void procesarEstadoMonitor(String cpId, String mensaje) {
+		if(mensaje.startsWith("Monitor_Desconectado")) {
+	        System.out.println("Monitor desconectado para CP: " + cpId);
+	        
+	        actualizarEstadoCP(cpId, "DESCONECTADO", true);
+
+	        registrarEvento(cpId, "MONITOR_DESCONECTADO", "Monitor desconectado - CP marcado como DESCONECTADO");
+	        
+	        String confirmacion = "Monitor_Desconectado_ACK|" + cpId;
+	        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
+	    }
+	}
+
 	private void procesarAveriaMonitor(String cpId, String mensaje) {
 		String confirmacion = "Averia_Monitor_ACK|" + cpId;
 	    productor.send(new ProducerRecord<>("central-to-monitor", cpId, confirmacion));
@@ -100,20 +117,52 @@ public class HiloServidor extends Thread {
 	}
 
 	private void procesarSolicitudDriver(String driverId, String mensaje) {
-		 System.out.println("Solicitud recibida de driver: " + driverId);
-		 
-		 String[] partes= mensaje.split("\\|");
-		 if(partes.length<4) {
-			 
-		 }
-		 
-		try {
-			registrarEvento(null, "SOLICITUD_DRIVER", "Solicitud recibida del driver " + driverId + " -> " + mensaje);
-        } 
-		catch (Exception e) {
-            System.err.println("[DB] Error registrando solicitud driver: " + e.getMessage());
-        }
-	}
+    	System.out.println("[CENTRAL] Solicitud recibida de driver: " + driverId + " -> " + mensaje);
+
+    	String[] partes = mensaje.split("\\|");
+    	if (partes.length < 3) {
+    	    System.err.println("[CENTRAL] Formato inválido en driver-solicitud");
+    	    return;
+    	}
+
+    	String cpSolicitado = partes[2];
+
+    	String cpDisponible = null;
+
+    	try (Connection conn = DBManager.getConnection();
+    	     PreparedStatement ps = conn.prepareStatement(
+    	             "SELECT id FROM charging_point " +
+    	                     "WHERE id = ? AND estado='ACTIVADO' AND funciona=TRUE AND registrado_central=TRUE")) {
+
+    	    ps.setString(1, cpSolicitado);
+    	    ResultSet rs = ps.executeQuery();
+
+    	    if (rs.next()) {
+    	        cpDisponible = rs.getString("id");
+    	    }
+    	} catch (SQLException e) {
+    	    System.err.println("[DB] Error verificando CP: " + e.getMessage());
+    	}
+
+    	if (cpDisponible == null) {
+    	    System.out.println("[CENTRAL] CP no disponible → solicitud denegada");
+    	    productor.send(new ProducerRecord<>("driver-autorizacion-" + driverId,
+    	            driverId, "Denegado|" + cpSolicitado));
+    	    registrarEvento(null, "AUTORIZACION_DENEGADA", "CP no disponible para " + driverId);
+    	    return;
+    	}
+
+    	String sesionId = "SES-" + System.currentTimeMillis();
+
+    	String comando = "Inicio_Suministro|" + driverId + "|" + sesionId;
+    	productor.send(new ProducerRecord<>("comandos-cp", cpDisponible, comando));
+
+    	productor.send(new ProducerRecord<>("driver-autorizacion-" + driverId,
+    	        driverId, "Autorizado|" + cpDisponible + "|" + sesionId));
+
+    	registrarEvento(cpDisponible, "AUTORIZACION_OK",
+    	        "Suministro autorizado para driver " + driverId + " (sesion " + sesionId + ")");
+	}	
 	
 
 	private void procesarRegistroMonitor(String cpId, String mensaje) {
