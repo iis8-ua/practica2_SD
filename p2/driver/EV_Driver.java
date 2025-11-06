@@ -240,8 +240,7 @@ public class EV_Driver {
 	}
 	
 	private void esperarFinServicio() {
-	    // 1) Esperar autorización (session != null)
-	    int timeoutAutorizacion = 60; // segundos para esperar autorización
+	    int timeoutAutorizacion = 60;
 	    while (this.sesion == null && timeoutAutorizacion > 0 && ejecucion) {
 	        try {
 	            Thread.sleep(1000);
@@ -262,9 +261,8 @@ public class EV_Driver {
 	        return;
 	    }
 	
-	    // 2) Ya autorizado -> esperar fin del servicio (sesion == null cuando llegue el ticket)
 	    System.out.println("[DRIVER] Autorizado. Esperando fin de suministro (ticket)...");
-	    int timeoutServicio = 600; // segundos máximos para que termine la recarga
+	    int timeoutServicio = 600;
 	    while (this.sesion != null && timeoutServicio > 0 && ejecucion) {
 	        try {
 	            Thread.sleep(1000);
@@ -281,7 +279,6 @@ public class EV_Driver {
 	    if (!ejecucion) return;
 	
 	    if (this.sesion != null) {
-	        // timeout del servicio -> limpiamos estado para no bloquear el resto
 	        System.err.println("Timeout expirado durante el servicio. Liberando estado.");
 	        this.cp = null;
 	        this.sesion = null;
