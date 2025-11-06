@@ -21,8 +21,8 @@ public class EV_Driver {
     private KafkaConsumer<String, String> consumidor;
     private volatile boolean ejecucion;
     private Scanner scanner;
-    private String cp;
-    private String sesion;
+    private volatile String cp;
+    private volatile String sesion;
     private Thread hiloMensajes;
 	
 
@@ -240,29 +240,56 @@ public class EV_Driver {
 	}
 	
 	private void esperarFinServicio() {
-		//se tiene que esperar que el servicio actual se termine de ejecutar
-		int timeout=120;
-		while(cp!=null && timeout>0 && ejecucion) {
-			try {
-				Thread.sleep(1000);
-				timeout--;
-				if(timeout %10==0) {
-					System.out.println("Esperando al servicio anterior... " + timeout + "s restantes");
-				}
-			}
-			catch(InterruptedException e) {
-				break;
-			}
-			
-		}
-		
-		if(timeout <= 0 && cp != null) {
-		    cp = null;
-		    sesion = null;
-		    System.err.println("Timeout expirado");
-		}
-		
+	    // 1) Esperar autorización (session != null)
+	    int timeoutAutorizacion = 60; // segundos para esperar autorización
+	    while (this.sesion == null && timeoutAutorizacion > 0 && ejecucion) {
+	        try {
+	            Thread.sleep(1000);
+	            timeoutAutorizacion--;
+	            if (timeoutAutorizacion % 10 == 0) {
+	                System.out.println("Esperando autorización... " + timeoutAutorizacion + "s restantes");
+	            }
+	        } catch (InterruptedException e) {
+	            Thread.currentThread().interrupt();
+	            break;
+	        }
+	    }
+	
+	    if (!ejecucion) return;
+	
+	    if (this.sesion == null) {
+	        System.err.println("Timeout esperando autorización. Se aborta este servicio.");
+	        return;
+	    }
+	
+	    // 2) Ya autorizado -> esperar fin del servicio (sesion == null cuando llegue el ticket)
+	    System.out.println("[DRIVER] Autorizado. Esperando fin de suministro (ticket)...");
+	    int timeoutServicio = 600; // segundos máximos para que termine la recarga
+	    while (this.sesion != null && timeoutServicio > 0 && ejecucion) {
+	        try {
+	            Thread.sleep(1000);
+	            timeoutServicio--;
+	            if (timeoutServicio % 30 == 0) {
+	                System.out.println("Esperando ticket... " + timeoutServicio + "s restantes");
+	            }
+	        } catch (InterruptedException e) {
+	            Thread.currentThread().interrupt();
+	            break;
+	        }
+	    }
+	
+	    if (!ejecucion) return;
+	
+	    if (this.sesion != null) {
+	        // timeout del servicio -> limpiamos estado para no bloquear el resto
+	        System.err.println("Timeout expirado durante el servicio. Liberando estado.");
+	        this.cp = null;
+	        this.sesion = null;
+	    } else {
+	        System.out.println("[DRIVER] Ticket recibido / servicio finalizado.");
+	    }
 	}
+	
 	
 	private void menu() {
 		while(ejecucion) {
