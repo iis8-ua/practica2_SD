@@ -34,6 +34,7 @@ public class EV_CP_E {
 	private Thread hilo; 
 	private Thread hiloEspera; 
 	private KafkaConsumer<String, String> consumidor;
+	private volatile boolean procesandoAveria = false;
 	
 	public static void main(String[] args) {
 		System.setProperty("org.slf4j.simpleLogger.log.org.slf4j", "OFF");
@@ -125,12 +126,23 @@ public class EV_CP_E {
 		  }
 	  }
 		
+	  
+	  
 		public void registrarEnCentral() {
 			if(!registrado) {
-				boolean registro=cp.registroEnCentral(dirKafka);
-				if(registro) {
-					registrado=true;
+				try {
+					boolean registro=cp.registroEnCentral(dirKafka);
+					if(registro) {
+						registrado=true;
+					}
+					else {
+						System.out.println("Imposible conectar con la CENTRAL");
+					}
 				}
+				catch(Exception e) {
+					System.out.println("Imposible conectar con la CENTRAL");
+				}
+				
 			}
 		}
 		
@@ -172,7 +184,7 @@ public class EV_CP_E {
 					try {
 						String mensaje=leerDatos(s);
 						if(mensaje==null) {
-							if(activo) {
+							if(activo && !procesandoAveria) {
 								System.out.println("Monitor desconectado");
 								marcarCPDesconectado();
 							}
@@ -194,7 +206,7 @@ public class EV_CP_E {
 						Thread.sleep(2000);
 					}
 					catch(InterruptedException e) {
-						if(activo) {
+						if(activo && !procesandoAveria) {
 							marcarCPDesconectado();
 						}
 	                    break;
@@ -216,19 +228,50 @@ public class EV_CP_E {
 	
 	private void marcarCPDesconectado() {
 	    if (cp != null) {
-	        try (Connection conn = DBManager.getConnection();
-	             PreparedStatement ps = conn.prepareStatement(
-	                     "UPDATE charging_point SET estado='DESCONECTADO', registrado_central=FALSE WHERE id=?")) {
-	            ps.setString(1, cp.getId());
-	            ps.executeUpdate();
-	            
-		        
-		        
-		        registrado=false;
-	        } 
+	        if (cp.getEstado() == CPState.SUMINISTRANDO) {
+	            cp.finalizarSuministro();
+	        }
+	        registrado = false;
+	        actualizarEstadoEnBD();
+	    }
+	}
 
-	        catch (SQLException e) {
-	            System.err.println("[DB] Error marcando CP como desconectado: " + e.getMessage());
+	private void actualizarEstadoEnBD() {
+	    Connection conn = null;
+	    PreparedStatement ps = null;
+	    
+	    try {
+	    	//mismo caso que en resetearCPenBD, me ha tocado hacer la conexion manual a la BD y luego gestionar
+	    	//la desconexion en el finally
+	        String url = "jdbc:mysql://localhost:3306/ev_charging_system?useSSL=false&serverTimezone=Europe/Madrid";
+	        conn = DriverManager.getConnection(url, "evuser", "evpass");
+	        
+	        ps = conn.prepareStatement(
+	            "UPDATE charging_point SET estado='DESCONECTADO', registrado_central=FALSE WHERE id=?"
+	        );
+	        ps.setString(1, cp.getId());
+	        ps.executeUpdate();
+	        
+	    } 
+	    catch (SQLException e) {
+	        System.err.println("[DB] Error actualizando BD: " + e.getMessage());  
+	    } 
+	    finally {
+	        if (ps != null) {
+	            try { 
+	            	ps.close(); 
+	            } 
+	            catch (SQLException e) {
+	            	
+	            }
+	        }
+	        if (conn != null) {
+	            try {
+	            	conn.close(); 
+	            } 
+	            catch (SQLException e) {
+	            	
+	            }
 	        }
 	    }
 	}
@@ -257,6 +300,7 @@ public class EV_CP_E {
 			}
 			catch(Exception e) {
 				System.err.println("Error en consumidor de Central: " + e.getMessage());
+				System.out.println("Imposible conectar con la CENTRAL");
 			}
 			finally {
 				if(consumidor!=null) {
@@ -339,6 +383,12 @@ public class EV_CP_E {
 	}
 
 	private void procesarAutorizacionEngine(String driverId, String sesionId, String cpId) {
+		if(!registrado) {
+			if(cp.getConector() != null) {
+	            cp.getConector().enviarAutorizacion(sesionId, driverId, false);
+	        }
+	        return;
+		}
 		if(cp.getEstado() ==CPState.ACTIVADO && cp.getFunciona()) {
 			//aceptada
 			if(cp.getConector() !=null) {
@@ -430,6 +480,11 @@ public class EV_CP_E {
     }
 	
 	private void iniciarSuministroManual() {
+		if(!registrado) {
+			System.out.println("No se puede iniciar suministro, monitor desconectado");
+			return;
+		}
+		
 		System.out.println("Introduce el ID del conductor: ");
 		String conductorId=scanner.next();
 		
@@ -472,62 +527,40 @@ public class EV_CP_E {
 	private void simularAveria() {
 		if(cp.getFunciona()) {
 			System.out.println("Fallo en el CP " + cp.getId());
-			cp.setFunciona2(false);
-			reportarAveria();
-			System.out.println("CP en estado de fallo, se ha notificado la averia a la Central");
+			procesandoAveria=true;
+			try {
+				cp.setFunciona(false);
+				System.out.println("CP en estado de fallo, se ha notificado la averia a la Central");
+			}
+			finally {
+				procesandoAveria=false;
+			}
+			
 		}
 		else {
 			System.out.println("El CP ya esta averiado: " +cp.getEstado());
 		}
 	}
 	
-	private void reportarAveria() {
-		try {
-	        Properties propiedades = new Properties();
-	        propiedades.put("bootstrap.servers", dirKafka);
-	        propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-	        propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-	        propiedades.put("acks", "1");
-	        
-	        KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
-	        String mensaje = "Averia|" + cp.getId();
-	        productor.send(new ProducerRecord<>("fallo-cp", cp.getId(), mensaje));
-	        productor.close();
-	        
-	    } 
-		catch (Exception e) {
-	        System.err.println("Error reportando avería: " + e.getMessage());
-	    }
-	}
 
 	private void repararAveria() {
 		if(cp.getEstado()==CPState.AVERIADO || !cp.getFunciona()) {
 			System.out.println("Reparando averia en CP " + cp.getId());
-			cp.setFunciona2(true);
-			reportarRecuperacion();
-			System.out.println("Averia reparada, se ha notificado la recuperación a la Central");
+			procesandoAveria=true;
+			try {
+				cp.setFunciona(true);
+				System.out.println("Averia reparada, se ha notificado la recuperación a la Central");
+			}
+			finally {
+				procesandoAveria=false;
+			}
+			
 		}
 		else {
 			System.out.println("No hay averia en el CP: " +cp.getEstado());
 		}
 	}
-	
-	private void reportarRecuperacion() {
-		try {
-			Properties propiedades = new Properties();
-			propiedades.put("bootstrap.servers", dirKafka);
-			propiedades.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-			propiedades.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-			propiedades.put("acks", "1");
-			KafkaProducer<String, String> productor = new KafkaProducer<>(propiedades);
-	        String mensaje = "Recuperacion|" + cp.getId();
-	        productor.send(new ProducerRecord<>("recuperacion-cp", cp.getId(), mensaje));
-	        productor.close();
-		}
-		catch(Exception e) {
-			 System.err.println("Error reportando la recuperación: " + e.getMessage());
-		}
-	}
+
 
 	private void mostrarEstadoCompleto() {
 		cp.imprimirInfoCP();
@@ -574,15 +607,43 @@ public class EV_CP_E {
 	}
 	
 	private void resetearCPenBD() {
-	    if(cp != null) {
-	        try (Connection conn = DBManager.getConnection();
-	             PreparedStatement ps = conn.prepareStatement(
-	                     "UPDATE charging_point SET estado='DESCONECTADO', funciona=TRUE, registrado_central=FALSE, conductor_actual=NULL, consumo_actual=0.0, importe_actual=0.0 WHERE id=?")) {
+	    if (cp != null) {
+	        Connection conn = null;
+	        PreparedStatement ps = null;
+	        
+	        try {
+	            //se tiene que crear la conexion independiente ya que sino no va con el DBManager, antes usaba la misma 
+	        	//conexion para todos y hacia que saltaran excepciones SQL
+	            String url = "jdbc:mysql://localhost:3306/ev_charging_system?useSSL=false&serverTimezone=Europe/Madrid";
+	            conn = DriverManager.getConnection(url, "evuser", "evpass");
+	            
+	            ps = conn.prepareStatement(
+	                "UPDATE charging_point SET estado='DESCONECTADO', funciona=TRUE, registrado_central=FALSE, conductor_actual=NULL, consumo_actual=0.0, importe_actual=0.0 WHERE id=?"
+	            );
 	            ps.setString(1, cp.getId());
 	            ps.executeUpdate();
+	            
 	        } 
 	        catch (SQLException e) {
 	            System.err.println("[DB] Error resetando CP en BD: " + e.getMessage());
+	        } 
+	        finally {
+	            if (ps != null) {
+	                try { 
+	                	ps.close(); 
+	                } 
+	                catch (SQLException e) {
+	                	
+	                }
+	            }
+	            if (conn != null) {
+	                try { 
+	                	conn.close(); 
+	                } 
+	                catch (SQLException e) { 
+	                		
+	                }
+	            }
 	        }
 	    }
 	}

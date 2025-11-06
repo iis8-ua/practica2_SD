@@ -83,7 +83,7 @@ public class EV_CP_M {
             this.ejecucion = true;
             
             if (!conectarCentral()) {
-            	System.err.println("No se ha podido establecer conecion con la central. Saliendo...");
+            	System.err.println("No se ha podido establecer conexion con la central. Saliendo...");
                 return;
             }
             
@@ -245,6 +245,8 @@ public class EV_CP_M {
 			 return false;
 		}
 	}
+	
+	
 
 	private boolean conectarCentral() {
 		try {
@@ -264,6 +266,7 @@ public class EV_CP_M {
 		}
 		catch(Exception e) {
 			 System.err.println("Error en la conexion con la Central: " + e.getMessage());
+			 System.out.println("Imposible conectar con la CENTRAL");
 			 return false;
 		}
 	}

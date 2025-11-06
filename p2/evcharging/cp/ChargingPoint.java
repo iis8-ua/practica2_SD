@@ -53,10 +53,12 @@ public class ChargingPoint {
 		   else {
 			   this.estado=CPState.DESCONECTADO;
 			   actualizarCPenBD("DESCONECTADO", true);
+			   System.out.println("Imposible conectar con la CENTRAL");
 			   return false;
 		   }
 	   } 
 	   catch (Exception e) {
+		   System.out.println("Imposible conectar con la CENTRAL");
 		   System.err.println("ERROR conectando a central: " + e.getMessage());
 		   this.estado=CPState.DESCONECTADO;
 		   actualizarCPenBD("DESCONECTADO", true);

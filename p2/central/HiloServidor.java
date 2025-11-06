@@ -117,51 +117,60 @@ public class HiloServidor extends Thread {
 	}
 
 	private void procesarSolicitudDriver(String driverId, String mensaje) {
-    	System.out.println("[CENTRAL] Solicitud recibida de driver: " + driverId + " -> " + mensaje);
-
-    	String[] partes = mensaje.split("\\|");
-    	if (partes.length < 3) {
-    	    System.err.println("[CENTRAL] Formato inválido en driver-solicitud");
-    	    return;
-    	}
-
-    	String cpSolicitado = partes[2];
-
-    	String cpDisponible = null;
-
-    	try (Connection conn = DBManager.getConnection();
-    	     PreparedStatement ps = conn.prepareStatement(
-    	             "SELECT id FROM charging_point " +
-    	                     "WHERE id = ? AND estado='ACTIVADO' AND funciona=TRUE AND registrado_central=TRUE")) {
-
-    	    ps.setString(1, cpSolicitado);
-    	    ResultSet rs = ps.executeQuery();
-
-    	    if (rs.next()) {
-    	        cpDisponible = rs.getString("id");
-    	    }
-    	} catch (SQLException e) {
-    	    System.err.println("[DB] Error verificando CP: " + e.getMessage());
-    	}
-
-    	if (cpDisponible == null) {
-    	    System.out.println("[CENTRAL] CP no disponible → solicitud denegada");
-    	    productor.send(new ProducerRecord<>("driver-autorizacion-" + driverId,
-    	            driverId, "Denegado|" + cpSolicitado));
-    	    registrarEvento(null, "AUTORIZACION_DENEGADA", "CP no disponible para " + driverId);
-    	    return;
-    	}
-
-    	String sesionId = "SES-" + System.currentTimeMillis();
-
-    	String comando = "Inicio_Suministro|" + driverId + "|" + sesionId;
-    	productor.send(new ProducerRecord<>("comandos-cp", cpDisponible, comando));
-
-    	productor.send(new ProducerRecord<>("driver-autorizacion-" + driverId,
-    	        driverId, "Autorizado|" + cpDisponible + "|" + sesionId));
-
-    	registrarEvento(cpDisponible, "AUTORIZACION_OK",
-    	        "Suministro autorizado para driver " + driverId + " (sesion " + sesionId + ")");
+	    System.out.println("[CENTRAL] Solicitud recibida de driver: " + driverId + " -> " + mensaje);
+		
+	    String[] partes = mensaje.split("\\|");
+	    if (partes.length < 3) {
+	        System.err.println("[CENTRAL] Formato inválido en driver-solicitud");
+	        return;
+	    }
+	
+	    String cpSolicitado = partes[2];
+	
+	    String cpDisponible = null;
+	
+	    try (Connection conn = DBManager.getConnection();
+	         PreparedStatement ps = conn.prepareStatement(
+	                 "SELECT id FROM charging_point " +
+	                         "WHERE id = ? AND estado='ACTIVADO' AND funciona=TRUE AND registrado_central=TRUE")) {
+							
+	        ps.setString(1, cpSolicitado);
+	        ResultSet rs = ps.executeQuery();
+							
+	        if (rs.next()) {
+	            cpDisponible = rs.getString("id");
+	        }
+	    } catch (SQLException e) {
+	        System.err.println("[DB] Error verificando CP: " + e.getMessage());
+	    }
+	
+	    if (cpDisponible == null) {
+	        productor.send(new ProducerRecord<>("driver-autorizacion-" + driverId,
+	                driverId, "Denegado|" + cpSolicitado));
+	        return;
+	    }
+	
+	    String sesionId = "SES-" + System.currentTimeMillis();
+	
+	    try (Connection conn = DBManager.getConnection();
+	         PreparedStatement ps = conn.prepareStatement(
+	                 "INSERT INTO charging_session (session_id, cp_id, conductor_id, estado) VALUES (?,?,?, 'EN_CURSO')")) {
+					
+	        ps.setString(1, sesionId);
+	        ps.setString(2, cpDisponible);
+	        ps.setString(3, driverId);
+	        ps.executeUpdate();
+	    } catch (SQLException e) {
+	        System.err.println("[DB] Error creando sesión: " + e.getMessage());
+	    }
+	
+	    String comando = "Inicio_Suministro|" + driverId + "|" + sesionId;
+	    productor.send(new ProducerRecord<>("comandos-cp", cpDisponible, comando));
+	
+	    productor.send(new ProducerRecord<>("driver-autorizacion-" + driverId,
+	            driverId, "Autorizado|" + cpDisponible + "|" + sesionId));
+	
+	    CentralDashboard.refrescarDesdeCentral();
 	}	
 	
 
@@ -297,16 +306,21 @@ public class HiloServidor extends Thread {
 	}
 	
 	private void procesarTicket(String cpId, String mensaje) {
-		String[] partes = mensaje.split("\\|");
+	    String[] partes = mensaje.split("\\|");
 	    String conductorId = partes[1];
-	    String consumo = partes[3];
-	    String importe = partes[2];
-	    
-	    System.out.printf("Ticket enviado a %s - %s: %s kW (%s €)%n", conductorId, cpId, consumo, importe);
-	    String confirmacion = "Ticket_ACK|" + cpId;
-        productor.send(new ProducerRecord<>("central-to-cp", cpId, confirmacion));
-        registrarEvento(cpId, "CONFIRMACION",
-                String.format("Ticket enviado a %s - Consumo %s kWh / %s €", conductorId, consumo, importe));
+	    String consumo = partes[2];
+	    String importe = partes[3];
+	
+	    System.out.printf("[CENTRAL] Ticket recibido de %s → Driver %s (%s kWh / %s €)%n",
+	            cpId, conductorId, consumo, importe);
+
+	    productor.send(new ProducerRecord<>("central-to-cp", cpId, "Ticket_ACK|" + cpId));
+	
+	    String mensajeDriver = String.format("Ticket|%s|%s|%s", cpId, consumo, importe);
+	    productor.send(new ProducerRecord<>("driver-ticket-" + conductorId, conductorId, mensajeDriver));
+	
+	    registrarEvento(cpId, "TICKET_ENVIADO",
+	            String.format("Ticket enviado a %s: %s kWh / %s €", conductorId, consumo, importe));
 	}
 
 	public void detener() {

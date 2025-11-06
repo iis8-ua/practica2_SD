@@ -127,10 +127,10 @@ public class EV_Driver {
 	            }
 	        }
 	    } catch (WakeupException e) {
-	        // esta excepción es NORMAL cuando hacemos consumidor.wakeup()
+	    	
 	    } finally {
 	        try {
-	            consumidor.close();   // <- único cierre válido
+	            consumidor.close();
 	            System.out.println("[DRIVER] Consumidor cerrado correctamente.");
 	        } catch (Exception ignore) {}
 	    }
@@ -240,7 +240,7 @@ public class EV_Driver {
 	}
 	
 	private void esperarFinServicio() {
-		//Se tiene que esperar que el servicio actual se termine de ejecutar, como maximo 2 minutos por servicio
+		//se tiene que esperar que el servicio actual se termine de ejecutar
 		int timeout=120;
 		while(cp!=null && timeout>0 && ejecucion) {
 			try {
@@ -256,11 +256,12 @@ public class EV_Driver {
 			
 		}
 		
-		if(timeout<0 && cp!=null) {
-			cp=null;
-			sesion=null;
-			System.err.println("Timeout expirado");
+		if(timeout <= 0 && cp != null) {
+		    cp = null;
+		    sesion = null;
+		    System.err.println("Timeout expirado");
 		}
+		
 	}
 	
 	private void menu() {
@@ -313,16 +314,24 @@ public class EV_Driver {
 	}
 	
 	private void solicitarServicio(String cpId) {
-		try {
-			String mensaje= String.format("Solicitud_Servicio|%s|%s", driverId, cpId);
-			ProducerRecord<String, String> record = new ProducerRecord<>("driver-solicitud", driverId, mensaje);
-			productor.send(record);
-			System.out.println("Solicitud enviada a la central para CP: " + cpId);
-		}
-		catch(Exception e) {
-			System.err.println("Error solicitando servicio: " + e.getMessage());
-		}
+	
+	    if (this.cp != null && this.sesion != null) {
+	        System.out.println("\n⚠ Ya tienes un servicio en curso en CP: " + cp);
+	        System.out.println("   Espera a que finalice antes de solicitar otro.\n");
+	        return;
+	    }
+
+	    try {
+	        String mensaje= String.format("Solicitud_Servicio|%s|%s", driverId, cpId);
+	        ProducerRecord<String, String> record = new ProducerRecord<>("driver-solicitud", driverId, mensaje);
+	        productor.send(record);
+	        System.out.println("Solicitud enviada a la central para CP: " + cpId);
+	    }
+	    catch(Exception e) {
+	        System.err.println("Error solicitando servicio: " + e.getMessage());
+	    }
 	}
+
 
 	private void detener() {
 	    try {
